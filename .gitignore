@@ -1,0 +1,5 @@
+session/
+src/data/database.json
+.env
+config.js
+node_modules/

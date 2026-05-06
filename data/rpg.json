@@ -1,0 +1,73 @@
+{
+  "players": {
+    "238722939379788@lid": {
+      "jid": "238722939379788@lid",
+      "clase": "asesino",
+      "nombre": "238722939379788",
+      "nivel": 1,
+      "exp": 50,
+      "expMax": 100,
+      "hp": 10,
+      "hpMax": 100,
+      "atk": 30,
+      "def": 8,
+      "spd": 25,
+      "oro": 45,
+      "gemas": 0,
+      "inventario": {},
+      "equipo": {
+        "arma": null,
+        "armadura": null
+      },
+      "misiones": {
+        "diarias": {},
+        "completadas": 0
+      },
+      "stats": {
+        "batallas": 4,
+        "victorias": 1,
+        "exploraciones": 0,
+        "enemigosKill": 0
+      },
+      "clan": null,
+      "ultimaExploracion": 0,
+      "ultimaMision": 0,
+      "creado": 1777766083270
+    },
+    "50148205949148@lid": {
+      "jid": "50148205949148@lid",
+      "clase": "guerrero",
+      "nombre": "50148205949148",
+      "nivel": 2,
+      "exp": 22,
+      "expMax": 150,
+      "hp": 16,
+      "hpMax": 160,
+      "atk": 22,
+      "def": 16,
+      "spd": 11,
+      "oro": 71,
+      "gemas": 0,
+      "inventario": {},
+      "equipo": {
+        "arma": null,
+        "armadura": null
+      },
+      "misiones": {
+        "diarias": {},
+        "completadas": 0
+      },
+      "stats": {
+        "batallas": 4,
+        "victorias": 3,
+        "exploraciones": 5,
+        "enemigosKill": 1
+      },
+      "clan": null,
+      "ultimaExploracion": 1777866626030,
+      "ultimaMision": 0,
+      "creado": 1777766095534
+    }
+  },
+  "guilds": {}
+}
