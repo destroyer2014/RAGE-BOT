@@ -13,9 +13,51 @@ import {
 import { Boom } from "@hapi/boom";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
+import QRCode from "qrcode";
+import express from "express";
 import chalk from "chalk";
 import { loadCommands, handleMessage } from "./src/lib/handler.js";
 import config from "./config.js";
+
+// ── Servidor web para mostrar QR ──────────────
+const app = express();
+const PORT = process.env.PORT || 3000;
+let currentQR = null;
+let botStatus = "iniciando";
+
+app.get("/", async (req, res) => {
+  if (botStatus === "conectado") {
+    return res.send(`
+      <html><body style="background:#111;color:#0f0;font-family:monospace;text-align:center;padding:50px">
+        <h1>✅ RAGE-BOT CONECTADO</h1>
+        <p>El bot está en línea y funcionando.</p>
+      </body></html>
+    `);
+  }
+  if (!currentQR) {
+    return res.send(`
+      <html><body style="background:#111;color:#fff;font-family:monospace;text-align:center;padding:50px">
+        <h1>⏳ RAGE-BOT</h1>
+        <p>Generando QR... recarga en 5 segundos.</p>
+        <script>setTimeout(()=>location.reload(),5000)</script>
+      </body></html>
+    `);
+  }
+  const qrImage = await QRCode.toDataURL(currentQR);
+  res.send(`
+    <html><body style="background:#111;color:#fff;font-family:monospace;text-align:center;padding:30px">
+      <h1>📱 RAGE-BOT — Escanea el QR</h1>
+      <img src="${qrImage}" style="width:300px;height:300px;border:4px solid #0f0;border-radius:10px"/>
+      <p>WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
+      <p style="color:#888;font-size:12px">Esta página se actualiza automáticamente</p>
+      <script>setTimeout(()=>location.reload(),30000)</script>
+    </body></html>
+  `);
+});
+
+app.listen(PORT, () => {
+  console.log(chalk.cyan(`[WEB] Servidor QR en puerto ${PORT}`));
+});
 
 // ── Logger silencioso (solo errores críticos) ─
 const logger = pino({ level: "silent" });
@@ -68,13 +110,13 @@ async function startBot() {
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    // Mostrar QR en terminal
+    // Mostrar QR en terminal y en web
     if (qr) {
+      currentQR = qr;
+      botStatus = "esperando_qr";
       console.log(chalk.yellow("\n[QR] Escanea este código con WhatsApp:\n"));
       qrcode.generate(qr, { small: true });
-      console.log(
-        chalk.gray("\n  WhatsApp → Dispositivos vinculados → Vincular dispositivo\n")
-      );
+      console.log(chalk.green(`[WEB] QR disponible en tu URL de Railway\n`));
     }
 
     if (connection === "close") {
@@ -91,6 +133,8 @@ async function startBot() {
     }
 
     if (connection === "open") {
+      currentQR = null;
+      botStatus = "conectado";
       const user = sock.user;
       console.log(chalk.green(`\n[BOT] ✅ Conectado como: ${user?.name || user?.id}`));
       console.log(chalk.green(`[BOT] 🤖 RAGE-BOT está listo y escuchando...\n`));
