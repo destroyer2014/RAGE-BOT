@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//   RAGE-BOT — src/commands/antiviewonce.js
+//   PRAGMATA BOT — src/commands/antiviewonce.js
 //     Revela fotos/videos de ver una vez
 //              v1.0.0
 // ═══════════════════════════════════════════

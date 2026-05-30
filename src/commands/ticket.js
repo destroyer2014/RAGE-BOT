@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//      RAGE-BOT — src/commands/ticket.js
+//      PRAGMATA BOT — src/commands/ticket.js
 //          Sistema de Tickets v1.0
 // ═══════════════════════════════════════════
 

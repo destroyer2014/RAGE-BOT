@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//           RAGE-BOT — index.js
+//           PRAGMATA BOT — index.js
 //       WhatsApp Bot by 51917611323
 // ═══════════════════════════════════════════
 
@@ -13,51 +13,13 @@ import {
 import { Boom } from "@hapi/boom";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
-import QRCode from "qrcode";
-import express from "express";
 import chalk from "chalk";
 import { loadCommands, handleMessage } from "./src/lib/handler.js";
+import { setSock } from "./src/lib/sockGlobal.js";
+import { initScheduler } from "./src/lib/scheduler.js";
 import config from "./config.js";
-
-// ── Servidor web para mostrar QR ──────────────
-const app = express();
-const PORT = process.env.PORT || 3000;
-let currentQR = null;
-let botStatus = "iniciando";
-
-app.get("/", async (req, res) => {
-  if (botStatus === "conectado") {
-    return res.send(`
-      <html><body style="background:#111;color:#0f0;font-family:monospace;text-align:center;padding:50px">
-        <h1>✅ RAGE-BOT CONECTADO</h1>
-        <p>El bot está en línea y funcionando.</p>
-      </body></html>
-    `);
-  }
-  if (!currentQR) {
-    return res.send(`
-      <html><body style="background:#111;color:#fff;font-family:monospace;text-align:center;padding:50px">
-        <h1>⏳ RAGE-BOT</h1>
-        <p>Generando QR... recarga en 5 segundos.</p>
-        <script>setTimeout(()=>location.reload(),5000)</script>
-      </body></html>
-    `);
-  }
-  const qrImage = await QRCode.toDataURL(currentQR);
-  res.send(`
-    <html><body style="background:#111;color:#fff;font-family:monospace;text-align:center;padding:30px">
-      <h1>📱 RAGE-BOT — Escanea el QR</h1>
-      <img src="${qrImage}" style="width:300px;height:300px;border:4px solid #0f0;border-radius:10px"/>
-      <p>WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
-      <p style="color:#888;font-size:12px">Esta página se actualiza automáticamente</p>
-      <script>setTimeout(()=>location.reload(),30000)</script>
-    </body></html>
-  `);
-});
-
-app.listen(PORT, () => {
-  console.log(chalk.cyan(`[WEB] Servidor QR en puerto ${PORT}`));
-});
+import { getUser } from "./src/lib/database.js";
+import { welcomeGroups } from "./src/commands/grupo.js";
 
 // ── Logger silencioso (solo errores críticos) ─
 const logger = pino({ level: "silent" });
@@ -99,7 +61,7 @@ async function startBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
-    browser: ["RAGE-BOT", "Chrome", "1.0.0"],
+    browser: ["PRAGMATA BOT", "Chrome", "1.0.0"],
     getMessage: async () => undefined,
   });
 
@@ -110,13 +72,11 @@ async function startBot() {
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    // Mostrar QR en terminal y en web
+    // Mostrar QR en terminal
     if (qr) {
-      currentQR = qr;
-      botStatus = "esperando_qr";
       console.log(chalk.yellow("\n[QR] Escanea este código con WhatsApp:\n"));
       qrcode.generate(qr, { small: true });
-      console.log(chalk.green(`[WEB] QR disponible en tu URL de Railway\n`));
+      console.log(chalk.gray("\n  WhatsApp → Dispositivos vinculados → Vincular dispositivo\n"));
     }
 
     if (connection === "close") {
@@ -133,19 +93,81 @@ async function startBot() {
     }
 
     if (connection === "open") {
-      currentQR = null;
-      botStatus = "conectado";
       const user = sock.user;
       console.log(chalk.green(`\n[BOT] ✅ Conectado como: ${user?.name || user?.id}`));
-      console.log(chalk.green(`[BOT] 🤖 RAGE-BOT está listo y escuchando...\n`));
+      console.log(chalk.green(`[BOT] 🤖 PRAGMATA BOT está listo y escuchando...\n`));
+      initScheduler(sock);
     }
   });
 
   // ── Manejar mensajes entrantes ───────────────
+  const groupsGreeted = new Set();
+  // Registrar sock globalmente al arrancar (necesario para broadcastGrupos y eventos)
+  setSock(sock);
+
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify") return;
     for (const msg of messages) {
+      const from = msg.key.remoteJid;
+      const isGroup = from?.endsWith("@g.us");
+
+      // Detectar cuando agregan al bot a un grupo (stubType 20, type append)
+      // FIX v2.5: usar continue en vez de return para no matar el loop completo
+      if (type !== "notify") continue;
+
+      // Detectar cuando agregan al bot a un grupo (stubType 20)
+      if (isGroup && msg.messageStubType === 20 && !groupsGreeted.has(from)) {
+        const botNumber = sock.user?.id?.split(":")[0];
+        const params = msg.messageStubParameters || [];
+        const isBot = params.some(p => p.includes(botNumber));
+        if (!isBot) { await handleMessage(sock, msg); continue; }
+        groupsGreeted.add(from);
+        continue;
+      }
+
+      // Detectar cuando agregan al bot a un grupo via mensaje de sistema
+      // FIX v2.5: solo saltar mensajes de sistema puros (sin contenido real)
+      if (isGroup && msg.messageStubType && !msg.message) {
+        const botNumber = sock.user?.id?.split(":")[0];
+        const isGroupAdd =
+          msg.messageStubType === 27 &&
+          msg.messageStubParameters?.some(p => p.includes(botNumber));
+        const isGroupCreate =
+          msg.messageStubType === 28 && msg.key.fromMe;
+
+        if ((isGroupAdd || isGroupCreate) && !groupsGreeted.has(from)) {
+          groupsGreeted.add(from);
+        }
+        continue; // son mensajes de sistema, no comandos
+      }
+
+      // Saludo a nuevo usuario en privado eliminado
+
       await handleMessage(sock, msg);
+    }
+  });
+
+  // ── Saludo cuando agregan al bot a un grupo (evento alternativo) ──
+  sock.ev.on("group-participants.update", async ({ id, participants, action }) => {
+    if (action === "add") {
+      // Saludo del bot cuando lo agregan
+      if (groupsGreeted.has(id)) return;
+      groupsGreeted.add(id);
+
+      // Bienvenida a nuevos miembros si está activada
+      if (welcomeGroups.has(id)) {
+        const botNumber = sock.user?.id?.split(":")[0];
+        const newMembers = participants.filter(p => !p.includes(botNumber));
+        for (const jid of newMembers) {
+          const num = jid.split("@")[0];
+          await sock.sendMessage(id, {
+            text:
+              `👋 *¡Bienvenido/a al grupo!*\n━━━━━━━━━━━━━━\n` +
+              `🔥 Hola @${num}, qué bueno tenerte aquí.\n\n` +
+              `➤ Escribe *!menu* para ver los comandos disponibles.`,
+            mentions: [jid],
+          });
+        }
+      }
     }
   });
 
@@ -153,7 +175,30 @@ async function startBot() {
 }
 
 // ── Arrancar ──────────────────────────────────
-startBot().catch((err) => {
+const startTime = Date.now();
+
+function getUptime() {
+  const diff = Math.floor((Date.now() - startTime) / 1000);
+  const d = Math.floor(diff / 86400);
+  const h = Math.floor((diff % 86400) / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+startBot().then((sock) => {
+  // Actualizar bio cada 60 segundos
+  setInterval(async () => {
+    try {
+      await sock.updateProfileStatus(
+        `⚡ PRAGMATA BOT v${config.botVersion} | 🟢 Activo: ${getUptime()} | By: ${config.ownerName}`
+      );
+    } catch {}
+  }, 60000);
+}).catch((err) => {
   console.error(chalk.red("[FATAL]"), err);
   process.exit(1);
 });

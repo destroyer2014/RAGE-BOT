@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//    RAGE-BOT — src/commands/descargas.js
+//    PRAGMATA BOT — src/commands/descargas.js
 //     Descargar videos de YT, TikTok, FB
 //              v1.1.0
 // ═══════════════════════════════════════════
@@ -67,6 +67,7 @@ const descargasCommands = [
     alias: ["ytv", "ytdown", "descargayt"],
     description: "Descarga un video de YouTube !ytvideo [url o nombre]",
     category: "Descargas 📥",
+    freeAllowed: true,
     execute: async (ctx) => {
       const { text, react, reply, sock, from, msg } = ctx;
       if (!text) return reply("❌ Uso: `!ytvideo [url o nombre del video]`");
@@ -96,6 +97,7 @@ const descargasCommands = [
     alias: ["tt", "tkvideo", "descargatt"],
     description: "Descarga un video de TikTok !tiktok [url]",
     category: "Descargas 📥",
+    freeAllowed: true,
     execute: async (ctx) => {
       const { text, react, reply, sock, from, msg } = ctx;
       if (!text || !text.startsWith("http")) return reply("❌ Uso: `!tiktok [url del video]`\nEjemplo: `!tiktok https://vt.tiktok.com/xxx`");
@@ -149,6 +151,7 @@ const descargasCommands = [
     alias: ["ttphoto", "tiktokfoto", "tikfoto"],
     description: "Descarga una foto de TikTok !ttfoto [url]",
     category: "Descargas 📥",
+    freeAllowed: true,
     execute: async (ctx) => {
       const { text, react, reply, sock, from, msg } = ctx;
       if (!text || !text.startsWith("http")) return reply("❌ Uso: `!ttfoto [url de la foto]`\nEjemplo: `!ttfoto https://vt.tiktok.com/xxx`");
@@ -209,6 +212,7 @@ const descargasCommands = [
     alias: ["fb", "facebook", "descargafb"],
     description: "Descarga un video de Facebook !fbvideo [url]",
     category: "Descargas 📥",
+    freeAllowed: true,
     execute: async (ctx) => {
       const { text, react, reply } = ctx;
       if (!text || !text.startsWith("http")) return reply("❌ Uso: `!fbvideo [url del video]`\nEjemplo: `!fbvideo https://www.facebook.com/watch?v=xxx`");

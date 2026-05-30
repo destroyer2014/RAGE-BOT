@@ -1,0 +1,271 @@
+{
+  "users": {
+    "50148205949148": {
+      "jid": "50148205949148@lid",
+      "pokecoins": 500,
+      "pokedex": [
+        {
+          "id": 158,
+          "name": "Totodile",
+          "types": "water",
+          "generation": "GEN II",
+          "rarity": "⭐",
+          "rarityLabel": "Común",
+          "value": 50,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/158.png",
+          "caughtAt": 1779046727396,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "catchMsg": null,
+      "totalCatches": 1,
+      "totalVotes": 0
+    },
+    "37010387542267": {
+      "jid": "37010387542267@lid",
+      "pokecoins": 500,
+      "pokedex": [
+        {
+          "id": 727,
+          "name": "Incineroar",
+          "types": "fire / dark",
+          "generation": "GEN VII",
+          "rarity": "⭐",
+          "rarityLabel": "Común",
+          "value": 50,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/727.png",
+          "caughtAt": 1779048842404,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 641,
+          "name": "Tornadus-incarnate",
+          "types": "flying",
+          "generation": "GEN V",
+          "rarity": "⭐",
+          "rarityLabel": "Común",
+          "value": 50,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/641.png",
+          "caughtAt": 1779153322312,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 199,
+          "name": "Slowking",
+          "types": "water / psychic",
+          "generation": "GEN II",
+          "rarity": "⭐⭐",
+          "rarityLabel": "Poco común",
+          "value": 100,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/199.png",
+          "caughtAt": 1779153454339,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "catchMsg": null,
+      "totalCatches": 3,
+      "totalVotes": 0
+    },
+    "39059137245309": {
+      "jid": "39059137245309@lid",
+      "pokecoins": 500,
+      "pokedex": [
+        {
+          "id": 988,
+          "name": "Slither-wing",
+          "types": "bug / fighting",
+          "generation": "GEN IX",
+          "rarity": "⭐",
+          "rarityLabel": "Común",
+          "value": 50,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/988.png",
+          "caughtAt": 1779051116095,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "catchMsg": null,
+      "totalCatches": 1,
+      "totalVotes": 0
+    },
+    "212682586255585": {
+      "jid": "212682586255585@lid",
+      "pokecoins": 500,
+      "pokedex": [
+        {
+          "id": 762,
+          "name": "Steenee",
+          "types": "grass",
+          "generation": "GEN VII",
+          "rarity": "⭐",
+          "rarityLabel": "Común",
+          "value": 50,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/762.png",
+          "caughtAt": 1779239239709,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 145,
+          "name": "Zapdos",
+          "types": "electric / flying",
+          "generation": "GEN I",
+          "rarity": "⭐⭐⭐",
+          "rarityLabel": "Raro",
+          "value": 250,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/145.png",
+          "caughtAt": 1779239262447,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 310,
+          "name": "Manectric",
+          "types": "electric",
+          "generation": "GEN III",
+          "rarity": "✨",
+          "rarityLabel": "Legendario",
+          "value": 500,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/310.png",
+          "caughtAt": 1779239383357,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 68,
+          "name": "Machamp",
+          "types": "fighting",
+          "generation": "GEN I",
+          "rarity": "⭐",
+          "rarityLabel": "Común",
+          "value": 50,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/68.png",
+          "caughtAt": 1779239396209,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 377,
+          "name": "Regirock",
+          "types": "rock",
+          "generation": "GEN III",
+          "rarity": "⭐",
+          "rarityLabel": "Común",
+          "value": 50,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/377.png",
+          "caughtAt": 1779239649469,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 930,
+          "name": "Arboliva",
+          "types": "grass / normal",
+          "generation": "GEN IX",
+          "rarity": "⭐⭐",
+          "rarityLabel": "Poco común",
+          "value": 100,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/930.png",
+          "caughtAt": 1779239662924,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 144,
+          "name": "Articuno",
+          "types": "ice / flying",
+          "generation": "GEN I",
+          "rarity": "⭐⭐",
+          "rarityLabel": "Poco común",
+          "value": 100,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/144.png",
+          "caughtAt": 1779239674166,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 204,
+          "name": "Pineco",
+          "types": "bug",
+          "generation": "GEN II",
+          "rarity": "⭐⭐",
+          "rarityLabel": "Poco común",
+          "value": 100,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/204.png",
+          "caughtAt": 1779239687370,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 370,
+          "name": "Luvdisc",
+          "types": "water",
+          "generation": "GEN III",
+          "rarity": "⭐⭐",
+          "rarityLabel": "Poco común",
+          "value": 100,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/370.png",
+          "caughtAt": 1779239697441,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 69,
+          "name": "Bellsprout",
+          "types": "grass / poison",
+          "generation": "GEN I",
+          "rarity": "⭐⭐⭐",
+          "rarityLabel": "Raro",
+          "value": 250,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/69.png",
+          "caughtAt": 1779239720515,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 6,
+          "name": "Charizard",
+          "types": "fire / flying",
+          "generation": "GEN I",
+          "rarity": "⭐⭐⭐",
+          "rarityLabel": "Raro",
+          "value": 250,
+          "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/6.png",
+          "caughtAt": 1779239732049,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "catchMsg": null,
+      "totalCatches": 11,
+      "totalVotes": 0,
+      "items": {}
+    }
+  },
+  "shop": [],
+  "series": []
+}

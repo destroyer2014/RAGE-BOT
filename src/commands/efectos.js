@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//      RAGE-BOT — src/commands/efectos.js
+//      PRAGMATA BOT — src/commands/efectos.js
 //         Efectos de audio con ffmpeg
 //              v1.0.0
 // ═══════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//       RAGE-BOT — src/commands/juegos.js
+//       PRAGMATA BOT — src/commands/juegos.js
 //     Ahorcado, Adivina el número, SuitPvP
 //              v1.0.0
 // ═══════════════════════════════════════════

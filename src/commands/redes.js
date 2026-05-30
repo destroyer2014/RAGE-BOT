@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//       RAGE-BOT — src/commands/redes.js
+//       PRAGMATA BOT — src/commands/redes.js
 //    Instagram, Pinterest, Mediafire
 //              v1.0.0
 // ═══════════════════════════════════════════
@@ -75,9 +75,9 @@ const redesCommands = [
         if (!results) return reply("❌ No pude descargar. Verifica el link.");
         for (const item of results.slice(0, 3)) {
           if (item.type === "video") {
-            await sock.sendMessage(from, { video: { url: item.url }, caption: "📸 Descargado por RAGE-BOT" }, { quoted: msg });
+            await sock.sendMessage(from, { video: { url: item.url }, caption: "📸 Descargado por PRAGMATA BOT" }, { quoted: msg });
           } else {
-            await sock.sendMessage(from, { image: { url: item.url }, caption: "📸 Descargado por RAGE-BOT" }, { quoted: msg });
+            await sock.sendMessage(from, { image: { url: item.url }, caption: "📸 Descargado por PRAGMATA BOT" }, { quoted: msg });
           }
         }
         await react("✅");

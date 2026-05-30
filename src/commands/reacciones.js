@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//    RAGE-BOT — src/commands/reacciones.js
+//    PRAGMATA BOT — src/commands/reacciones.js
 //       Sistema de reacciones con GIF v3.2
 // ═══════════════════════════════════════════
 
@@ -11,94 +11,117 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
-const ENDPOINTS = {
-  // Sociales
-  kiss:      "https://nekos.best/api/v2/kiss",
-  hug:       "https://nekos.best/api/v2/hug",
-  pat:       "https://nekos.best/api/v2/pat",
-  cuddle:    "https://nekos.best/api/v2/cuddle",
-  handhold:  "https://nekos.best/api/v2/handhold",
-  wave:      "https://nekos.best/api/v2/wave",
-  highfive:  "https://nekos.best/api/v2/highfive",
-  wink:      "https://nekos.best/api/v2/wink",
-  feed:      "https://nekos.best/api/v2/feed",
-  poke:      "https://nekos.best/api/v2/poke",
-  lick:      "https://nekos.best/api/v2/lick",
-  stare:     "https://nekos.best/api/v2/stare",
-  nom:       "https://nekos.best/api/v2/nom",
-  tickle:    "https://nekos.best/api/v2/tickle",
-  // Agresivas
-  slap:      "https://nekos.best/api/v2/slap",
-  punch:     "https://nekos.best/api/v2/punch",
-  kick:      "https://nekos.best/api/v2/kick",
-  bite:      "https://nekos.best/api/v2/bite",
-  shoot:     "https://nekos.best/api/v2/shoot",
-  yeet:      "https://nekos.best/api/v2/yeet",
-  // Emociones
-  cry:       "https://nekos.best/api/v2/cry",
-  laugh:     "https://nekos.best/api/v2/laugh",
-  sleep:     "https://nekos.best/api/v2/sleep",
-  dance:     "https://nekos.best/api/v2/dance",
-  angry:     "https://nekos.best/api/v2/angry",
-  happy:     "https://nekos.best/api/v2/happy",
-  sad:       "https://nekos.best/api/v2/sad",
-  blush:     "https://nekos.best/api/v2/blush",
-  think:     "https://nekos.best/api/v2/think",
-  facepalm:  "https://nekos.best/api/v2/facepalm",
-  shrug:     "https://nekos.best/api/v2/shrug",
-  bored:     "https://nekos.best/api/v2/bored",
-  nod:       "https://nekos.best/api/v2/nod",
-  nope:      "https://nekos.best/api/v2/nope",
-  smug:      "https://nekos.best/api/v2/smug",
-  thumbsup:  "https://nekos.best/api/v2/thumbsup",
-  nervous:   "https://nekos.best/api/v2/nervous",
-  panic:     "https://nekos.best/api/v2/panic",
-  pout:      "https://nekos.best/api/v2/pout",
-  woah:      "https://nekos.best/api/v2/woah",
-  yawn:      "https://nekos.best/api/v2/yawn",
-  run:       "https://nekos.best/api/v2/run",
-  confused:  "https://nekos.best/api/v2/confused",
+// ── Endpoints REALES de nekos.best (verificados) ─
+// lurk, shoot, sleep, clap, shrug, stare, wave, poke, confused, smile,
+// peck, wink, sip, blush, smug, tickle, yeet, think, highfive, feed,
+// wag, bite, teehee, shocked, bleh, bored, nom, nya, yawn, facepalm,
+// cuddle, kick, happy, carry, hug, kabedon, baka, bonk, pat, angry,
+// spin, shake, run, nod, nope, kiss, dance, punch, handshake, slap,
+// cry, lappillow, pout, blowkiss, handhold, salute, thumbsup, laugh,
+// tableflip
+
+const REACTION_MAP = {
+  // ── Exactos ────────────────────────────────
+  kiss:       "kiss",
+  hug:        "hug",
+  pat:        "pat",
+  cuddle:     "cuddle",
+  handhold:   "handhold",
+  wave:       "wave",
+  highfive:   "highfive",
+  wink:       "wink",
+  feed:       "feed",
+  poke:       "poke",
+  lick:       "lappillow",  // más cercano
+  stare:      "stare",
+  nom:        "nom",
+  tickle:     "tickle",
+  slap:       "slap",
+  punch:      "punch",
+  kick:       "kick",
+  bite:       "bite",
+  shoot:      "shoot",
+  yeet:       "yeet",
+  cry:        "cry",
+  laugh:      "laugh",
+  sleep:      "sleep",
+  dance:      "dance",
+  angry:      "angry",
+  happy:      "happy",
+  sad:        "cry",
+  blush:      "blush",
+  think:      "think",
+  facepalm:   "facepalm",
+  shrug:      "shrug",
+  bored:      "bored",
+  nod:        "nod",
+  nope:       "nope",
+  smug:       "smug",
+  thumbsup:   "thumbsup",
+  nervous:    "shake",
+  panic:      "shocked",
+  pout:       "pout",
+  woah:       "shocked",
+  yawn:       "yawn",
+  run:        "run",
+  confused:   "confused",
+  clap:       "clap",
+  bleh:       "bleh",
+  // ── Aproximados (mejor opción visual) ──────
+  greet:      "wave",
+  coffee:     "sip",
+  eat:        "nom",
+  love:       "blowkiss",
+  scared:     "shake",
+  shy:        "blush",
+  sing:       "teehee",
+  walk:       "run",
+  bath:       "wag",
+  call:       "wave",
+  cold:       "shake",
+  cook:       "nom",
+  dramatic:   "tableflip",
+  draw:       "think",
+  drunk:      "spin",
+  gaming:     "smug",
+  heat:       "yawn",
+  impregnate: "kabedon",
+  jump:       "spin",
+  kill:       "bonk",
+  kisscheek:  "peck",
+  lewd:       "blush",
+  psycho:     "baka",
+  push:       "yeet",
+  scream:     "shocked",
+  seduce:     "blowkiss",
+  smoke:      "lurk",
+  spit:       "bleh",
+  step:       "kick",
 };
 
-// ── Obtiene la URL del GIF ──
+// ── Obtiene URL de GIF directo desde nekos.best ─
 async function fetchGifUrl(tipo) {
+  const endpoint = REACTION_MAP[tipo];
+  if (!endpoint) return null;
   try {
-    const res = await fetch(ENDPOINTS[tipo], {
-      headers: { "User-Agent": "RAGE-BOT/3.0" }
+    const res = await fetch(`https://nekos.best/api/v2/${endpoint}`, {
+      headers: { "User-Agent": "PRAGMATA BOT/3.0" }
     });
-    if (!res.ok) return null;
+    if (res.ok) {
+      const json = await res.json();
+      const url = json?.results?.[0]?.url;
+      if (url) return url;
+    }
+  } catch {}
+  // fallback genérico
+  try {
+    const res = await fetch(`https://nekos.best/api/v2/pat`, {
+      headers: { "User-Agent": "PRAGMATA BOT/3.0" }
+    });
     const json = await res.json();
     return json?.results?.[0]?.url || null;
-  } catch {
-    return null;
-  }
-}
-
-// ── Convierte GIF a MP4 con ffmpeg y devuelve buffer ──
-async function gifToMp4Buffer(gifUrl) {
-  const tmp = tmpdir();
-  const gifPath = join(tmp, `reac_${Date.now()}.gif`);
-  const mp4Path = join(tmp, `reac_${Date.now()}.mp4`);
-  try {
-    // Descargar GIF
-    const res = await fetch(gifUrl, { headers: { "User-Agent": "RAGE-BOT/3.0" } });
-    if (!res.ok) return null;
-    const gifBuf = Buffer.from(await res.arrayBuffer());
-    await writeFile(gifPath, gifBuf);
-
-    // Convertir GIF → MP4 con ffmpeg
-    await execAsync(
-      `ffmpeg -f gif -i "${gifPath}" -movflags faststart -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" "${mp4Path}" -y`
-    );
-
-    const mp4Buf = await readFile(mp4Path);
-    return mp4Buf;
-  } catch {
-    return null;
-  } finally {
-    unlink(gifPath).catch(() => {});
-    unlink(mp4Path).catch(() => {});
-  }
+  } catch {}
+  return null;
 }
 
 // ── Obtiene el mencionado ──
@@ -106,6 +129,49 @@ function getTarget(ctx) {
   const mentioned =
     ctx.msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
   return mentioned.length > 0 ? mentioned[0] : null;
+}
+
+// ── Convierte GIF/WEBP a MP4 o devuelve MP4 directo ──
+async function gifToMp4Buffer(gifUrl) {
+  const tmp = tmpdir();
+  const ts  = Date.now();
+  const mp4Path = join(tmp, `reac_${ts}.mp4`);
+  try {
+    const res = await fetch(gifUrl, { headers: { "User-Agent": "PRAGMATA BOT/3.0" } });
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "";
+    const buf = Buffer.from(await res.arrayBuffer());
+
+    // Si ya es MP4, devolverlo directo sin convertir
+    if (contentType.includes("video/mp4") || gifUrl.endsWith(".mp4")) {
+      return buf;
+    }
+
+    // Detectar formato real por magic bytes
+    const isWebp = buf[0] === 0x52 && buf[1] === 0x49; // RIFF
+    const isGif  = buf[0] === 0x47 && buf[1] === 0x49; // GIF
+
+    if (!isWebp && !isGif) {
+      // Puede ser mp4 aunque no tenga header correcto, intentar enviar directo
+      return buf;
+    }
+
+    const ext     = isWebp ? "webp" : "gif";
+    const inPath  = join(tmp, `reac_${ts}.${ext}`);
+    await writeFile(inPath, buf);
+
+    // Comando ffmpeg sin forzar -f gif para que detecte automáticamente
+    await execAsync(
+      `ffmpeg -i "${inPath}" -movflags faststart -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" "${mp4Path}" -y`
+    );
+    const mp4Buf = await readFile(mp4Path);
+    unlink(inPath).catch(() => {});
+    return mp4Buf;
+  } catch {
+    return null;
+  } finally {
+    unlink(mp4Path).catch(() => {});
+  }
 }
 
 // ── Envía reacción con GIF convertido a MP4 ──
@@ -360,6 +426,163 @@ const reactionCommands = [
     execute: (ctx) => sendGifReaction(ctx, "confused", (yo) =>
       `😕 *${yo}* está muy confundido...`) },
 
+  // ══ NUEVOS COMANDOS ══
+
+  { name: "bath", alias: [],
+    description: "Bañarse", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "bath", (yo, el) =>
+      el ? `🛁 *${yo}* está bañando a *${el}*` : `🛁 *${yo}* se va a bañar~`) },
+
+  { name: "bleh", alias: [],
+    description: "Sacar la lengua", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "bleh", (yo, el) =>
+      el ? `😛 *${yo}* le saca la lengua a *${el}*` : `😛 *${yo}* saca la lengua`) },
+
+  { name: "call", alias: [],
+    description: "Llamar a alguien", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "call", (yo, el) =>
+      el ? `📞 *${yo}* está llamando a *${el}*` : `📞 *${yo}* está esperando una llamada...`) },
+
+  { name: "clap", alias: ["aplaudir"],
+    description: "Aplaudir", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "clap", (yo, el) =>
+      el ? `👏 *${yo}* le aplaude a *${el}*` : `👏 *${yo}* aplaude`) },
+
+  { name: "coffee", alias: ["cafe"],
+    description: "Tomar café", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "coffee", (yo, el) =>
+      el ? `☕ *${yo}* invita un café a *${el}*` : `☕ *${yo}* se toma un cafecito...`) },
+
+  { name: "cold", alias: [],
+    description: "Tener frío", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "cold", (yo, el) =>
+      el ? `🥶 *${yo}* está congelándose junto a *${el}*` : `🥶 *${yo}* está temblando de frío...`) },
+
+  { name: "cook", alias: [],
+    description: "Cocinar", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "cook", (yo, el) =>
+      el ? `👨‍🍳 *${yo}* cocina algo rico para *${el}*` : `👨‍🍳 *${yo}* está cocinando algo delicioso~`) },
+
+  { name: "dramatic", alias: ["drama"],
+    description: "Modo drama activado", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "dramatic", (yo, el) =>
+      el ? `🎭 *${yo}* está siendo muy dramático con *${el}*` : `🎭 *${yo}* activa el modo DRAMA 🎬`) },
+
+  { name: "draw", alias: [],
+    description: "Dibujar", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "draw", (yo, el) =>
+      el ? `✏️ *${yo}* dibuja el retrato de *${el}*` : `✏️ *${yo}* está dibujando algo~`) },
+
+  { name: "drunk", alias: [],
+    description: "Estar borracho", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "drunk", (yo, el) =>
+      el ? `🍺 *${yo}* está borracho gracias a *${el}*` : `🍺 *${yo}* está completamente borracho 🥴`) },
+
+  { name: "eat", alias: ["comer"],
+    description: "Comer algo delicioso", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "eat", (yo, el) =>
+      el ? `🍜 *${yo}* comparte su comida con *${el}*` : `🍜 *${yo}* está comiendo rico~`) },
+
+  { name: "gaming", alias: [],
+    description: "Jugar videojuegos", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "gaming", (yo, el) =>
+      el ? `🎮 *${yo}* retó a *${el}* a jugar` : `🎮 *${yo}* está en modo gamer 🕹️`) },
+
+  { name: "greet", alias: ["hi"],
+    description: "Saludar a alguien", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "greet", (yo, el) =>
+      el ? `👋 *${yo}* le dice hola a *${el}*` : `👋 *${yo}* saluda a todos~`) },
+
+  { name: "heat", alias: [],
+    description: "Tener calor", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "heat", (yo, el) =>
+      el ? `🥵 *${yo}* se derrite de calor junto a *${el}*` : `🥵 *${yo}* se está derritiendo del calor...`) },
+
+  { name: "impregnate", alias: ["preg", "preñar"],
+    description: "Embarazar a alguien", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "impregnate", (yo, el) =>
+      el ? `😏 *${yo}* quiere embarazar a *${el}* 💀` : `😏 *${yo}* está en modo reproductivo 💀`) },
+
+  { name: "jump", alias: [],
+    description: "Saltar", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "jump", (yo, el) =>
+      el ? `🦘 *${yo}* salta encima de *${el}*` : `🦘 *${yo}* salta de emoción~`) },
+
+  { name: "kill", alias: [],
+    description: "Matar a alguien", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "kill", (yo, el) =>
+      el ? `💀 *${yo}* eliminó a *${el}* del servidor 💀` : `💀 *${yo}* está en modo asesino...`) },
+
+  { name: "kisscheek", alias: ["beso"],
+    description: "Beso en la mejilla", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "kisscheek", (yo, el) =>
+      el ? `😚 *${yo}* le da un besito en la mejilla a *${el}* 🥰` : `😚 *${yo}* manda besitos en la mejilla~`) },
+
+  { name: "lewd", alias: [],
+    description: "Hacer algo lascivo", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "lewd", (yo, el) =>
+      el ? `😳 *${yo}* está siendo muy lascivo con *${el}*` : `😳 *${yo}* tiene pensamientos lascivos...`) },
+
+  { name: "love", alias: ["amor"],
+    description: "Sentirse enamorado", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "love", (yo, el) =>
+      el ? `💕 *${yo}* está enamorado de *${el}* 💗` : `💕 *${yo}* está enamorado~`) },
+
+  { name: "psycho", alias: [],
+    description: "Modo psicópata", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "psycho", (yo, el) =>
+      el ? `😈 *${yo}* se puso psicópata con *${el}*` : `😈 *${yo}* activa su modo PSICÓPATA 🔪`) },
+
+  { name: "push", alias: [],
+    description: "Empujar a alguien", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "push", (yo, el) =>
+      el ? `💢 *${yo}* empuja a *${el}* 😤` : `💢 *${yo}* empuja todo lo que está en su camino`) },
+
+  { name: "scared", alias: [],
+    description: "Estar asustado", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "scared", (yo, el) =>
+      el ? `😱 *${yo}* le tiene miedo a *${el}*` : `😱 *${yo}* está muerto de miedo...`) },
+
+  { name: "scream", alias: [],
+    description: "Gritar", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "scream", (yo, el) =>
+      el ? `😤 *${yo}* le grita a *${el}*` : `😤 *${yo}* GRITA al vacío`) },
+
+  { name: "seduce", alias: [],
+    description: "Seducir a alguien", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "seduce", (yo, el) =>
+      el ? `😘 *${yo}* está seduciendo a *${el}* 🌹` : `😘 *${yo}* intenta seducir a alguien~`) },
+
+  { name: "shy", alias: ["timido"],
+    description: "Sentir timidez", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "shy", (yo, el) =>
+      el ? `😖 *${yo}* se pone tímido con *${el}*` : `😖 *${yo}* se muere de timidez~`) },
+
+  { name: "sing", alias: [],
+    description: "Cantar", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "sing", (yo, el) =>
+      el ? `🎤 *${yo}* le canta una canción a *${el}*` : `🎤 *${yo}* está cantando a todo pulmón~`) },
+
+  { name: "smoke", alias: [],
+    description: "Fumar", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "smoke", (yo, el) =>
+      el ? `🚬 *${yo}* fuma pensando en *${el}*` : `🚬 *${yo}* enciende un cigarro...`) },
+
+  { name: "spit", alias: ["escupir"],
+    description: "Escupir", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "spit", (yo, el) =>
+      el ? `🤢 *${yo}* le escupe a *${el}*` : `🤢 *${yo}* escupe`) },
+
+  { name: "step", alias: ["pisar"],
+    description: "Pisar a alguien", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "step", (yo, el) =>
+      el ? `👟 *${yo}* le pisa encima a *${el}*` : `👟 *${yo}* aplasta todo lo que encuentra`) },
+
+  { name: "walk", alias: [],
+    description: "Caminar", category: "Reacciones 🎭",
+    execute: (ctx) => sendGifReaction(ctx, "walk", (yo, el) =>
+      el ? `🚶 *${yo}* se va caminando con *${el}*` : `🚶 *${yo}* sale a caminar...`) },
+
   // ══ MENÚ ══
   {
     name: "reacciones",
@@ -371,28 +594,29 @@ const reactionCommands = [
 `🎭 *REACCIONES CON GIF* 🎌
 ━━━━━━━━━━━━━━━━━━━━
 💕 *Sociales:*
-!kiss (Beso) • !hug (Abrazo) • !pat (Palmadita)
-!cuddle (Mimos) • !handhold (Tomar mano)
-!wave (Saludar) • !highfive (Chocar cinco)
-!wink (Guiño) • !feed (Dar de comer)
-!poke (Molestar) • !lick (Lamer)
-!stare (Mirar fijo) • !nom (Nom nom)
-!tickle (Cosquillas)
+!kiss • !hug • !pat • !cuddle • !handhold
+!wave • !highfive • !wink • !feed • !poke
+!lick • !stare • !nom • !tickle • !greet
+!call • !clap • !coffee • !cook • !eat
+!kiss • !kisscheek • !love • !seduce • !hug
+!bath • !sing • !dance • !cuddle
 
-⚔️ *Agresivas (broma):*
-!slap (Bofetada) • !punch (Golpe)
-!kick (Patada) • !bite (Mordida)
-!shoot (Disparar) • !yeet (Lanzar)
+⚔️ *Acción (broma):*
+!slap • !punch • !kick • !bite • !shoot
+!yeet • !kill • !push • !step • !spit
+!impregnate • !psycho • !scream
 
 😄 *Emociones:*
-!cry (Llorar) • !laugh (Reír) • !sleep (Dormir)
-!dance (Bailar) • !angry (Enojado) • !happy (Feliz)
-!sad (Triste) • !blush (Ruborizar) • !think (Pensar)
-!facepalm • !shrug (Hombros) • !bored (Aburrido)
-!nod (Asentir) • !nope (Negar) • !smug (Presumir)
-!thumbsup (👍) • !nervous (Nervioso) • !panic (Pánico)
-!pout (Morritos) • !woah (Sorpresa) • !yawn (Bostezo)
-!run (Correr) • !confused (Confundido)
+!cry • !laugh • !sleep • !angry • !happy
+!sad • !blush • !think • !facepalm • !shrug
+!bored • !nod • !nope • !smug • !thumbsup
+!nervous • !panic • !pout • !woah • !yawn
+!run • !confused • !scared • !shy • !love
+!dramatic • !lewd • !bleh • !pout
+
+🎮 *Actividades:*
+!gaming • !draw • !smoke • !drunk • !walk
+!jump • !cold • !heat • !coffee • !cook
 
 _Uso: !comando @usuario_`
       );

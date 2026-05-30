@@ -1,0 +1,46 @@
+{
+  "199213501648920@lid": {
+    "welcome": true,
+    "antilink": false
+  },
+  "120363424627758212@g.us": {
+    "welcome": true,
+    "antilink": false
+  },
+  "120363424570837021@g.us": {
+    "welcome": false,
+    "antilink": true
+  },
+  "120363424527947695@g.us": {
+    "welcome": true,
+    "antilink": true
+  },
+  "120363422410525394@g.us": {
+    "welcome": true,
+    "antilink": true
+  },
+  "120363412073969459@g.us": {
+    "welcome": true,
+    "antilink": true
+  },
+  "120363426190832242@g.us": {
+    "welcome": false,
+    "antilink": true
+  },
+  "120363421213982556@g.us": {
+    "welcome": false,
+    "antilink": true
+  },
+  "120363428273862245@g.us": {
+    "welcome": true,
+    "antilink": true
+  },
+  "120363426315587907@g.us": {
+    "welcome": true,
+    "antilink": true
+  },
+  "120363409673900406@g.us": {
+    "welcome": true,
+    "antilink": true
+  }
+}

@@ -1,9 +1,13 @@
 // ═══════════════════════════════════════════
-//     RAGE-BOT — src/commands/niveles.js
+//     PRAGMATA BOT — src/commands/niveles.js
 //        Sistema de niveles y XP
 // ═══════════════════════════════════════════
 
-import { getUser, getTopUsers, xpBar, xpForLevel } from "../lib/database.js";
+import { getUser, getTopUsers, xpBar, xpForLevel, getPremiumPlan } from "../lib/database.js";
+import { readFile } from "fs/promises";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const nivelesCommands = [
 
@@ -99,30 +103,92 @@ const nivelesCommands = [
       const user = getUser(sender);
       const nextXP = xpForLevel(user.level + 1);
       const bar = xpBar(user.xp, nextXP);
-      const premiumTag = user.premium ? "⭐ *PREMIUM*" : "👤 Normal";
+      const plan = getPremiumPlan(sender);
+      const planesInfo = { plata: "🥈 Rage-Plata", dorado: "🥇 Rage-Dorado", king: "👑 King-Rage", dios: "🔱 Dios-Rage" };
+      const premiumTag = user.premium ? `⭐ *PREMIUM* — ${planesInfo[plan] || "Plan activo"}` : "👤 Normal";
+      const expiry = user.premiumExpiry ? `\n⏳ Expira: *${new Date(user.premiumExpiry).toLocaleDateString("es-PE")}*` : "";
 
-      // Rango por nivel
       let rango = "🥉 Novato";
       if (user.level >= 5)  rango = "🥈 Aprendiz";
       if (user.level >= 10) rango = "🥇 Veterano";
       if (user.level >= 20) rango = "💎 Élite";
       if (user.level >= 50) rango = "👑 Leyenda";
 
-      await reply(
-        `╔══════════════════════════╗\n` +
-        `║     👤  *MI PERFIL*          ║\n` +
-        `╚══════════════════════════╝\n\n` +
-        `📛 Usuario: @${sender.split("@")[0]}\n` +
-        `🏅 Rango: ${rango}\n` +
-        `${premiumTag}\n\n` +
-        `╔══════════════════════════╗\n` +
-        `║     📊  *ESTADÍSTICAS*       ║\n` +
-        `╚══════════════════════════╝\n\n` +
-        `⚡ Nivel: *${user.level}*\n` +
-        `✨ XP: *${user.xp}* / ${nextXP}\n` +
+      const nombre = user.name || `+${sender.split("@")[0]}`;
+      const caption =
+        `👤 *${nombre}*\n` +
+        `🏅 ${rango}  |  ${premiumTag}${expiry}\n\n` +
+        `⚡ Nivel: *${user.level}*  ✨ XP: *${user.xp}*/${nextXP}\n` +
         `[${bar}]\n` +
-        `📟 Comandos usados: *${user.commandsUsed || 0}*\n`,
-      );
+        `📟 Comandos usados: *${user.commandsUsed || 0}*`;
+
+      const bannerFile = plan ? `banner-${plan}.png` : "banner-sinpremium.png";
+      const bannerPath = join(__dirname, "../../assets", bannerFile);
+      try {
+        const img = await readFile(bannerPath);
+        await sock.sendMessage(from, { image: img, mimetype: "image/png" }, { quoted: msg });
+        await sock.sendMessage(from, { text: caption });
+      } catch {
+        await reply(caption);
+      }
+    },
+  },
+
+  // ────────────────────────────────────────
+  // !verperfil — Ver perfil de otro usuario
+  // ────────────────────────────────────────
+  {
+    name: "verperfil",
+    alias: ["verrank", "vernivel", "verperfil"],
+    description: "Ver el perfil de otro usuario",
+    category: "Niveles",
+    execute: async ({ reply, msg, sock, from }) => {
+      const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+      if (!mentioned.length) return reply("👤 Menciona a alguien.\nEj: *!verperfil @usuario*");
+
+      const target = mentioned[0];
+      const user = getUser(target);
+      if (!user) return reply("❌ Ese usuario aún no tiene perfil en el bot.");
+
+      const nextXP = xpForLevel(user.level + 1);
+      const bar = xpBar(user.xp, nextXP);
+      const plan = getPremiumPlan(target);
+      const planesInfo = {
+        plata:  "🥈 Rage-Plata",
+        dorado: "🥇 Rage-Dorado",
+        king:   "👑 King-Rage",
+        dios:   "🔱 Dios-Rage",
+      };
+      const premiumTag = user.premium
+        ? `⭐ *PREMIUM* — ${planesInfo[plan] || "Plan activo"}`
+        : "👤 Normal";
+      const expiry = user.premiumExpiry
+        ? `\n⏳ Expira: *${new Date(user.premiumExpiry).toLocaleDateString("es-PE")}*`
+        : "";
+
+      let rango = "🥉 Novato";
+      if (user.level >= 5)  rango = "🥈 Aprendiz";
+      if (user.level >= 10) rango = "🥇 Veterano";
+      if (user.level >= 20) rango = "💎 Élite";
+      if (user.level >= 50) rango = "👑 Leyenda";
+
+      const nombre = user.name || `+${target.split("@")[0]}`;
+      const caption =
+        `👤 *${nombre}*\n` +
+        `🏅 ${rango}  |  ${premiumTag}${expiry}\n\n` +
+        `⚡ Nivel: *${user.level}*  ✨ XP: *${user.xp}*/${nextXP}\n` +
+        `[${bar}]\n` +
+        `📟 Comandos usados: *${user.commandsUsed || 0}*`;
+
+      const bannerFile = plan ? `banner-${plan}.png` : "banner-sinpremium.png";
+      const bannerPath = join(__dirname, "../../assets", bannerFile);
+      try {
+        const img = await readFile(bannerPath);
+        await sock.sendMessage(from, { image: img }, { quoted: msg });
+        await sock.sendMessage(from, { text: caption });
+      } catch {
+        await reply(caption);
+      }
     },
   },
 
@@ -139,34 +205,80 @@ const nivelesCommands = [
       if (!top.length) return reply("📊 Aún no hay usuarios en el ranking.");
 
       const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
-      // Mostrar número limpio sin código de país extraño
-      const mentions = top
-        .filter(u => u.displayId && u.displayId.length <= 15)
-        .map(u => u.displayId + "@s.whatsapp.net");
-      const list = top
-        .map((u, i) => {
-          // Prioridad: nombre guardado → número de teléfono → últimos 4 dígitos
-          let label;
-          if (u.name && !/^[0-9]{10,}$/.test(u.name)) {
-            label = u.name;
-          } else if (u.phone) {
-            label = "+" + u.phone;
-          } else {
-            label = "@" + (u.id || "????");
-          }
-          return `${medals[i]} *${label}* — Nv.*${u.level}* | XP: ${u.xp}${u.premium ? " ⭐" : ""}`;
-        })
-        .join("\n");
+      const medalTxt = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+      const mentions = top.filter(u => u.displayId && u.displayId.length <= 15).map(u => u.displayId + "@s.whatsapp.net");
 
-      await sock.sendMessage(from, {
-        text:
-          `╔══════════════════════════╗\n` +
-          `║   🏆  *TOP 10 - RAGE-BOT*   ║\n` +
-          `╚══════════════════════════╝\n\n` +
-          `${list}\n\n` +
-          `_Usa más comandos para subir en el ranking_`,
-        mentions,
-      }, { quoted: msg });
+      try {
+        const Jimp = (await import("jimp")).default;
+        const { loadFont, FONT_SANS_16_WHITE, FONT_SANS_14_WHITE, FONT_SANS_32_WHITE } = await import("jimp");
+
+        const W = 600, ROW = 40, H = 90 + top.length * ROW;
+        const img = new Jimp({ width: W, height: H, color: 0x0d0d0dff });
+
+        // Borde dorado
+        for (let x = 0; x < W; x++) {
+          for (let t = 0; t < 3; t++) {
+            img.setPixelColor(0xc9a84cff, x, t);
+            img.setPixelColor(0xc9a84cff, x, H - 1 - t);
+          }
+        }
+        for (let y = 0; y < H; y++) {
+          for (let t = 0; t < 3; t++) {
+            img.setPixelColor(0xc9a84cff, t, y);
+            img.setPixelColor(0xc9a84cff, W - 1 - t, y);
+          }
+        }
+
+        // Línea separadora título
+        for (let x = 20; x < W - 20; x++) img.setPixelColor(0xc9a84cff, x, 55);
+
+        // Filas alternadas
+        top.forEach((_, i) => {
+          const y = 65 + i * ROW;
+          const color = i % 2 === 0 ? 0x151515ff : 0x1a1a1aff;
+          for (let px = 10; px < W - 10; px++)
+            for (let py = y; py < y + ROW - 2; py++)
+              img.setPixelColor(color, px, py);
+        });
+
+        // Línea inferior
+        for (let x = 20; x < W - 20; x++) img.setPixelColor(0xc9a84cff, x, H - 12);
+
+        const font16 = await loadFont(FONT_SANS_16_WHITE);
+        const font32 = await loadFont(FONT_SANS_32_WHITE);
+
+        // Título
+        img.print({ font: font32, x: 0, y: 10, text: { text: "TOP 10 - PRAGMATA BOT", alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER }, maxWidth: W });
+
+        // Filas
+        top.forEach((u, i) => {
+          let label;
+          if (u.name && !/^[0-9]{10,}$/.test(u.name)) label = u.name;
+          else if (u.phone) label = "+" + u.phone;
+          else label = "@" + (u.id || "????");
+
+          const y = 72 + i * ROW;
+          const pos = medalTxt[i];
+          const stats = `Nv.${u.level} | ${u.xp} XP${u.premium ? " *" : ""}`;
+          img.print({ font: font16, x: 20, y, text: `${pos}. ${label.slice(0, 24)}` });
+          img.print({ font: font16, x: 0, y, text: { text: stats, alignmentX: Jimp.HORIZONTAL_ALIGN_RIGHT }, maxWidth: W - 20 });
+        });
+
+        const buffer = await img.getBuffer("image/png");
+        await sock.sendMessage(from, { image: buffer, mimetype: "image/png", caption: "_Usa más comandos para subir en el ranking_ 🔥" }, { quoted: msg });
+      } catch {
+        const list = top.map((u, i) => {
+          let label;
+          if (u.name && !/^[0-9]{10,}$/.test(u.name)) label = u.name;
+          else if (u.phone) label = "+" + u.phone;
+          else label = "@" + (u.id || "????");
+          return `${medals[i]} *${label}* — Nv.*${u.level}* | XP: ${u.xp}${u.premium ? " ⭐" : ""}`;
+        }).join("\n");
+        await sock.sendMessage(from, {
+          text: `🏆 *TOP 10 - PRAGMATA BOT*\n\n${list}\n\n_Usa más comandos para subir en el ranking_`,
+          mentions,
+        }, { quoted: msg });
+      }
     },
   },
 ];

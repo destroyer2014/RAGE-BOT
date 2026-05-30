@@ -1,0 +1,149 @@
+{
+  "users": {
+    "50148205949148": {
+      "jid": "50148205949148@lid",
+      "yenes": 500,
+      "harem": [
+        {
+          "id": 36,
+          "name": "Phyllo",
+          "serie": ".hack//Roots",
+          "rarity": "⭐",
+          "value": 50,
+          "image": "https://s4.anilist.co/file/anilistcdn/character/large/36.jpg",
+          "claimedAt": 1779002556756,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "claimMsg": null,
+      "totalClaims": 1,
+      "totalVotes": 0
+    },
+    "43023056552127": {
+      "jid": "43023056552127@lid",
+      "yenes": 500,
+      "harem": [],
+      "favorites": [],
+      "claimMsg": null,
+      "totalClaims": 0,
+      "totalVotes": 0
+    },
+    "176841033814068": {
+      "jid": "176841033814068@lid",
+      "yenes": 500,
+      "harem": [
+        {
+          "id": 28,
+          "name": "Kurapika",
+          "serie": "HUNTER×HUNTER (2011)",
+          "rarity": "⭐⭐⭐",
+          "value": 250,
+          "image": "https://s4.anilist.co/file/anilistcdn/character/large/b28-ivA7UGnfE40a.png",
+          "claimedAt": 1779203348010,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 34,
+          "name": "Shino",
+          "serie": ".hack//Roots",
+          "rarity": "⭐",
+          "value": 50,
+          "image": "https://s4.anilist.co/file/anilistcdn/character/large/34.jpg",
+          "claimedAt": 1779235574089,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        },
+        {
+          "id": 20,
+          "name": "Mitsukuni Haninozuka",
+          "serie": "Ouran Koukou Host Club",
+          "rarity": "⭐⭐⭐",
+          "value": 250,
+          "image": "https://s4.anilist.co/file/anilistcdn/character/large/b20-VNIsuFhxyiJu.png",
+          "claimedAt": 1779250863504,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "claimMsg": null,
+      "totalClaims": 3,
+      "totalVotes": 0
+    },
+    "150500284612652": {
+      "jid": "150500284612652@lid",
+      "yenes": 500,
+      "harem": [
+        {
+          "id": 28,
+          "name": "Kurapika",
+          "serie": "HUNTER×HUNTER (2011)",
+          "rarity": "⭐",
+          "value": 50,
+          "image": "https://s4.anilist.co/file/anilistcdn/character/large/b28-ivA7UGnfE40a.png",
+          "claimedAt": 1779239590553,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "claimMsg": null,
+      "totalClaims": 1,
+      "totalVotes": 0
+    },
+    "76725530656933": {
+      "jid": "76725530656933@lid",
+      "yenes": 500,
+      "harem": [
+        {
+          "id": 49,
+          "name": "Shido Fuyuki",
+          "serie": "GetBackers: Dakkanya",
+          "rarity": "⭐",
+          "value": 50,
+          "image": "https://s4.anilist.co/file/anilistcdn/character/large/b49-P3iXGHesj95S.png",
+          "claimedAt": 1779239829590,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "claimMsg": null,
+      "totalClaims": 1,
+      "totalVotes": 0
+    },
+    "262148294983740": {
+      "jid": "262148294983740@lid",
+      "yenes": 500,
+      "harem": [
+        {
+          "id": 25,
+          "name": "Renge Houshakuji",
+          "serie": "Ouran Koukou Host Club",
+          "rarity": "⭐",
+          "value": 50,
+          "image": "https://s4.anilist.co/file/anilistcdn/character/large/b25-EFSvaBRwzbNF.png",
+          "claimedAt": 1779251192998,
+          "votes": 0,
+          "forSale": false,
+          "salePrice": 0
+        }
+      ],
+      "favorites": [],
+      "claimMsg": null,
+      "totalClaims": 1,
+      "totalVotes": 0
+    }
+  },
+  "shop": [],
+  "series": []
+}

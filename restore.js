@@ -31,11 +31,14 @@ if (process.env.SESSION_DATA) {
 // ── Generar config.js desde variables de entorno ─
 const configData = `
 const config = {
-  ownerNumber: "${process.env.OWNER_NUMBER || ""}",
-  ownerName: "${process.env.OWNER_NAME || "RAGE-BOT"}",
+  ownerNumber: "${process.env.OWNER_NUMBER || "51917611323"}",
+  ownerName: "${process.env.OWNER_NAME || "Zemo"}",
+  ownerLid: "${process.env.OWNER_LID || "50148205949148"}",
   botName: "${process.env.BOT_NAME || "RAGE-BOT"}",
   prefix: "${process.env.PREFIX || "!"}",
   botVersion: "3.0.8",
+  subCreators: [],
+  subCreatorLids: [],
 };
 export default config;
 `.trim();

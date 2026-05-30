@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//     RAGE-BOT — src/commands/diversion.js
+//     PRAGMATA BOT — src/commands/diversion.js
 // ═══════════════════════════════════════════
 
 import { random, randomPick } from "../lib/utils.js";
@@ -58,8 +58,8 @@ const funCommands = [
   // !moneda
   // ────────────────────────────────────────
   {
-    name: "moneda",
-    alias: ["coin", "cara", "sello", "flip"],
+    name: "flip",
+    alias: ["coin", "cara", "sello", "moneda-diversion"],
     description: "Lanza una moneda",
     category: "Diversión",
     execute: async ({ reply }) => {
@@ -143,7 +143,7 @@ const funCommands = [
     description: "Insulto de broma aleatorio",
     category: "Diversión",
     execute: async ({ reply }) => {
-      await reply(`💀 *RAGE-BOT te destruye:*\n\n${randomPick(INSULTOS)}`);
+      await reply(`💀 *PRAGMATA BOT te destruye:*\n\n${randomPick(INSULTOS)}`);
     },
   },
 ];

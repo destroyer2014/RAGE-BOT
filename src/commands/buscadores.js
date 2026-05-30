@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//     RAGE-BOT — src/commands/buscadores.js
+//     PRAGMATA BOT — src/commands/buscadores.js
 //              v1.0.0
 // ═══════════════════════════════════════════
 

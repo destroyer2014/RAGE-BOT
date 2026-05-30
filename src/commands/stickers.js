@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//     RAGE-BOT — src/commands/stickers.js
+//     PRAGMATA BOT — src/commands/stickers.js
 // ═══════════════════════════════════════════
 
 import { writeFile, unlink, readFile } from "fs/promises";
@@ -9,6 +9,10 @@ import { execSync, exec } from "child_process";
 import { promisify } from "util";
 import { getQuoted, getMessageType } from "../lib/utils.js";
 import config from "../../config.js";
+// Metadata del sticker via ffmpeg metadata
+function addStickerMetadata(buffer) {
+  return buffer;
+}
 
 const execAsync = promisify(exec);
 
@@ -21,10 +25,12 @@ async function imageToSticker(buffer) {
   const tmpIn = join(tmpdir(), `rage_in_${Date.now()}.jpg`);
   const tmpOut = join(tmpdir(), `rage_out_${Date.now()}.webp`);
   await writeFile(tmpIn, buffer);
+  const vf = "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:white";
+  const packname = config.stickerPackname.replace(/\n/g, " ");
+  const author   = config.stickerAuthor.replace(/\n/g, " ");
   try {
-    // Escala la imagen a 480x480 y añade borde blanco de 16px (total 512x512)
     execSync(
-      `ffmpeg -y -i "${tmpIn}" -vf "scale=480:480:force_original_aspect_ratio=decrease,pad=480:480:(ow-iw)/2:(oh-ih)/2:white,pad=512:512:16:16:white" "${tmpOut}"`,
+      `ffmpeg -y -i "${tmpIn}" -vf "${vf}" -vcodec libwebp -compression_level 6 -metadata title="${packname}" -metadata artist="${author}" "${tmpOut}"`,
       { stdio: "pipe" }
     );
     return await readFile(tmpOut);
@@ -38,10 +44,10 @@ async function videoToSticker(buffer) {
   const tmpIn = join(tmpdir(), `rage_vin_${Date.now()}.mp4`);
   const tmpOut = join(tmpdir(), `rage_vout_${Date.now()}.webp`);
   await writeFile(tmpIn, buffer);
+  const vf = "fps=15,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:white";
   try {
-    // Convierte video a webp animado (máx 3 seg, 512x512)
     execSync(
-      `ffmpeg -y -i "${tmpIn}" -t 3 -vf "fps=15,scale=480:480:force_original_aspect_ratio=decrease,pad=480:480:(ow-iw)/2:(oh-ih)/2:white,pad=512:512:16:16:white" -loop 0 -preset default -an -vsync 0 "${tmpOut}"`,
+      `ffmpeg -y -i "${tmpIn}" -t 3 -vf "${vf}" -loop 0 -preset default -an -vsync 0 "${tmpOut}"`,
       { stdio: "pipe", timeout: 60000 }
     );
     return await readFile(tmpOut);
@@ -60,6 +66,7 @@ const stickerCommands = [
     alias: ["s", "stiker"],
     description: "Convierte imagen/video a sticker",
     category: "Stickers",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply, react }) => {
       const quoted = getQuoted(msg);
       const msgType = getMessageType(msg);
@@ -85,7 +92,7 @@ const stickerCommands = [
         const webp = targetType === "videoMessage"
           ? await videoToSticker(buffer)
           : await imageToSticker(buffer);
-        await sock.sendMessage(from, { sticker: webp }, { quoted: msg });
+        await sock.sendMessage(from, { sticker: webp, mimetype: 'image/webp' }, { quoted: msg });
         await react("✅");
       } catch (err) {
         console.error("[STICKER]", err.message);
@@ -103,6 +110,7 @@ const stickerCommands = [
     alias: ["svid", "stickertomp4", "stickervideo"],
     description: "Convierte sticker animado a video MP4",
     category: "Stickers",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply, react }) => {
       const quoted = getQuoted(msg);
       const msgType = getMessageType(msg);
@@ -159,6 +167,7 @@ const stickerCommands = [
     alias: ["stickertoimg", "toimage", "unsticker"],
     description: "Convierte sticker a imagen",
     category: "Stickers",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply, react }) => {
       const quoted = getQuoted(msg);
       const msgType = getMessageType(msg);
@@ -196,6 +205,7 @@ const stickerCommands = [
     alias: ["textsticker", "tsticker"],
     description: "Crea un sticker de texto",
     category: "Stickers",
+    freeAllowed: true,
     execute: async ({ sock, from, msg, reply, react, text }) => {
       if (!text) return reply("✏️ Escribe el texto.\nEj: *!stext Hola mundo!*");
       await react("✏️");
@@ -209,7 +219,7 @@ const stickerCommands = [
           { stdio: "pipe" }
         );
         const webpBuffer = await readFile(tmpOut);
-        await sock.sendMessage(from, { sticker: webpBuffer }, { quoted: msg });
+        await sock.sendMessage(from, { sticker: webpBuffer, mimetype: 'image/webp' }, { quoted: msg });
         await react("✅");
       } catch {
         await reply("❌ No pude crear el sticker de texto.\n_Requiere ffmpeg:_\n`pkg install ffmpeg`");
@@ -228,6 +238,7 @@ const stickerCommands = [
     alias: ["animsticker", "stickeranim", "stickergif"],
     description: "Crea un sticker animado de texto",
     category: "Stickers",
+    freeAllowed: true,
     execute: async ({ sock, from, msg, reply, react, text }) => {
       if (!text) return reply("✏️ Escribe el texto.\nEj: *!sanim Hola mundo!*");
       await react("✨");
@@ -242,7 +253,7 @@ const stickerCommands = [
           { stdio: "pipe", timeout: 30000 }
         );
         const webpBuffer = await readFile(tmpOut);
-        await sock.sendMessage(from, { sticker: webpBuffer }, { quoted: msg });
+        await sock.sendMessage(from, { sticker: webpBuffer, mimetype: 'image/webp' }, { quoted: msg });
         await react("✅");
       } catch (err) {
         console.error("[SANIM]", err.message);

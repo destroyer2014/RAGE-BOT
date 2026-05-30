@@ -1,7 +1,6 @@
 // ═══════════════════════════════════════════
-//      RAGE-BOT — src/commands/grupo.js
-//   Administración de grupos + Antilink
-//              v2.4.0
+//      PRAGMATA BOT — src/commands/grupo.js
+//   Administración de grupos + Antilink v3.0
 // ═══════════════════════════════════════════
 
 import { isGroup, cleanJid } from "../lib/utils.js";
@@ -10,26 +9,82 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ANTILINK_FILE = join(__dirname, "../../data/antilink.json");
 
-// ── Persistencia del antilink ──────────────────
+// ── Archivos de persistencia ──────────────────────────────────
+const ANTILINK_FILE       = join(__dirname, "../../data/antilink.json");
+const ANTILINK_REDES_FILE = join(__dirname, "../../data/antilink_redes.json");
+
+// ── Persistencia antilink WhatsApp (general) ──────────────────
 function loadAntilinkGroups() {
   try {
-    if (existsSync(ANTILINK_FILE)) {
-      const data = JSON.parse(readFileSync(ANTILINK_FILE, "utf-8"));
-      return new Set(data);
-    }
+    if (existsSync(ANTILINK_FILE)) return new Set(JSON.parse(readFileSync(ANTILINK_FILE, "utf-8")));
   } catch {}
   return new Set();
 }
-
 function saveAntilinkGroups() {
-  try {
-    writeFileSync(ANTILINK_FILE, JSON.stringify([...antilinkGroups]), "utf-8");
-  } catch {}
+  try { writeFileSync(ANTILINK_FILE, JSON.stringify([...antilinkGroups]), "utf-8"); } catch {}
 }
-
 export const antilinkGroups = loadAntilinkGroups();
+
+// ── Persistencia antilink por red social ─────────────────────
+function loadAntilinkRedes() {
+  try {
+    if (existsSync(ANTILINK_REDES_FILE)) return JSON.parse(readFileSync(ANTILINK_REDES_FILE, "utf-8"));
+  } catch {}
+  return {};
+}
+function saveAntilinkRedes() {
+  try { writeFileSync(ANTILINK_REDES_FILE, JSON.stringify(antilinkRedes), "utf-8"); } catch {}
+}
+export const antilinkRedes = loadAntilinkRedes();
+
+// ── Regexes por plataforma ────────────────────────────────────
+export const REDES_REGEX = {
+  tiktok:    /\b(?:https?:\/\/)?(?:www\.)?tiktok\.com(\/\S*)?/i,
+  youtube:   /\b(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)(\/\S*)?/i,
+  telegram:  /\b(?:https?:\/\/)?(?:www\.)?(?:telegram\.org|t\.me)(\/\S*)?/i,
+  facebook:  /\b(?:https?:\/\/)?(?:www\.)?(?:facebook\.com|fb\.me|fb\.watch)(\/\S*)?/i,
+  instagram: /\b(?:https?:\/\/)?(?:www\.)?instagram\.com(\/\S*)?/i,
+  twitter:   /\b(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)(\/\S*)?/i,
+  discord:   /\b(?:https?:\/\/)?(?:www\.)?(?:discord\.com|discord\.gg)(\/\S*)?/i,
+  threads:   /\b(?:https?:\/\/)?(?:www\.)?threads\.net(\/\S*)?/i,
+  twitch:    /\b(?:https?:\/\/)?(?:www\.)?twitch\.tv(\/\S*)?/i,
+};
+
+// ── Regex general (links WhatsApp + cualquier URL) ────────────
+export const LINK_REGEX = /(?:https?:\/\/|ftp:\/\/|www\.|ftp\.)|chat\.whatsapp\.com|whatsapp\.com\/channel/i;
+
+// ── Antilink2: detecta CUALQUIER URL incluso sin https ────────
+export const LINK_REGEX2 = (text) => {
+  const urlRegex = /(?:[a-zA-Z]+:\/\/[^\s]+)|(?:\b(www\.|ftp\.)[^\s]+\.[a-z]{2,}\/?[^\s]*)|(?:\b[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
+  const urls = [...new Set(
+    (text.match(urlRegex) || [])
+      .map((m) => m.replace(/[.,;!?]+$/, ""))
+      .map((m) => (/^(?:www\.|ftp\.)/.test(m) ? "http://" + m : m))
+      .map((m) => (/^(?!https?:\/\/|ftp:\/\/)/.test(m) ? "http://" + m : m))
+      .filter((u) => {
+        try {
+          const parsed = new URL(u);
+          return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(parsed.hostname);
+        } catch { return false; }
+      })
+  )];
+  return urls.length > 0;
+};
+
+// ── Persistencia del welcome ───────────────────
+const WELCOME_FILE = join(__dirname, "../../data/welcome.json");
+
+function loadWelcomeGroups() {
+  try {
+    if (existsSync(WELCOME_FILE)) return new Set(JSON.parse(readFileSync(WELCOME_FILE, "utf-8")));
+  } catch {}
+  return new Set();
+}
+function saveWelcomeGroups() {
+  try { writeFileSync(WELCOME_FILE, JSON.stringify([...welcomeGroups]), "utf-8"); } catch {}
+}
+export const welcomeGroups = loadWelcomeGroups();
 
 // ── Detecta si el bot es admin — compatible con LID y número ──
 async function botIsAdmin(sock, groupJid) {
@@ -48,7 +103,16 @@ async function botIsAdmin(sock, groupJid) {
 // ── Detecta si el sender es admin — compatible con LID y número ──
 async function senderIsAdmin(sock, groupJid, senderJid) {
   const meta = await sock.groupMetadata(groupJid);
-  const senderNum = cleanJid(senderJid).split("@")[0];
+  // Resolver LID a número real si aplica
+  let resolvedJid = cleanJid(senderJid);
+  if (resolvedJid.endsWith("@lid")) {
+    const lidNum = resolvedJid.split("@")[0];
+    const match = meta.participants.find((p) =>
+      cleanJid(p.id).split("@")[0] === lidNum || p.lid?.split("@")[0] === lidNum
+    );
+    if (match) resolvedJid = cleanJid(match.id);
+  }
+  const senderNum = resolvedJid.split("@")[0];
   const p = meta.participants.find((p) => {
     const pNum = cleanJid(p.id).split("@")[0];
     return pNum === senderNum || p.id.startsWith(senderNum);
@@ -56,8 +120,7 @@ async function senderIsAdmin(sock, groupJid, senderJid) {
   return p?.admin === "admin" || p?.admin === "superadmin";
 }
 
-// Regex: detecta links de WhatsApp y URLs generales
-export const LINK_REGEX = /(?:https?:\/\/|www\.)|chat\.whatsapp\.com/i;
+
 
 const groupCommands = [
 
@@ -67,6 +130,7 @@ const groupCommands = [
     alias: ["todos", "all", "tagall", "mencionar"],
     description: "Menciona a todos en el grupo",
     category: "Grupo",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       try {
@@ -90,6 +154,7 @@ const groupCommands = [
     alias: ["expulsar", "kick", "remove"],
     description: "Expulsa a un usuario del grupo",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply, sender, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -117,6 +182,7 @@ const groupCommands = [
     alias: ["agregar", "añadir"],
     description: "Agrega un número al grupo (ej: !add 51999888777)",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, from, reply, sender, args, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -148,6 +214,7 @@ const groupCommands = [
     alias: ["makeadmin", "hacreadmin", "admin"],
     description: "Hace admin a un usuario",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply, sender, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -169,6 +236,7 @@ const groupCommands = [
     alias: ["quitaradmin", "removeadmin"],
     description: "Quita el admin a un usuario",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply, sender, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -192,6 +260,7 @@ const groupCommands = [
     alias: ["silenciar", "cerrar", "lock"],
     description: "Silencia el grupo",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, from, reply, sender, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -211,6 +280,7 @@ const groupCommands = [
     alias: ["abrir", "unlock", "open"],
     description: "Abre el grupo para todos",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, from, reply, sender, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -232,6 +302,7 @@ const groupCommands = [
     alias: ["renombrar", "nombre", "groupname"],
     description: "Cambia el nombre del grupo",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, from, reply, sender, text, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -252,6 +323,7 @@ const groupCommands = [
     alias: ["descripcion", "groupdesc", "setdesc"],
     description: "Cambia la descripción del grupo",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, from, reply, sender, text, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -274,6 +346,7 @@ const groupCommands = [
     alias: ["groupinfo", "infogrupo", "grupo"],
     description: "Muestra información del grupo",
     category: "Grupo",
+    freeAllowed: true,
     execute: async ({ sock, from, reply }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       try {
@@ -301,6 +374,7 @@ const groupCommands = [
     alias: ["advertir", "aviso"],
     description: "Advierte a un usuario",
     category: "Grupo Admin",
+    freeAllowed: true,
     execute: async ({ sock, msg, from, reply, sender, text, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
@@ -325,6 +399,7 @@ const groupCommands = [
     alias: ["chatid", "gid"],
     description: "Muestra el ID del chat actual",
     category: "General",
+    freeAllowed: true,
     execute: async ({ reply, from, sender }) => {
       await reply(`🆔 *IDs del chat*\n━━━━━━━━━━━━━━\n📍 Chat: \`${from}\`\n👤 Tú: \`${sender}\``);
     },
@@ -334,25 +409,67 @@ const groupCommands = [
   {
     name: "antilink",
     alias: ["antlink", "nolinks"],
-    description: "Activa/desactiva el antilink en el grupo",
+    description: "Activa/desactiva el antilink de grupos WhatsApp",
+    category: "Grupo Admin",
+    execute: async ({ sock, from, reply, sender, args, isOwner }) => {
+      if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
+      const isAdmin = await senderIsAdmin(sock, from, sender);
+      if (!isAdmin && !isOwner) return reply("🔒 Solo admins pueden usar este comando.");
+      const sub = (args[0] || "").toLowerCase();
+      if (sub === "on" || sub === "activar") {
+        antilinkGroups.add(from);
+        saveAntilinkGroups();
+        await reply("🔗 *Antilink ACTIVADO* ✅\nEliminaré links de grupos de WhatsApp y expulsaré al que los mande (excepto admins).");
+      } else if (sub === "off" || sub === "desactivar") {
+        antilinkGroups.delete(from);
+        saveAntilinkGroups();
+        await reply("🔗 *Antilink DESACTIVADO* ❌");
+      } else {
+        const estado = antilinkGroups.has(from) ? "✅ ACTIVADO" : "❌ DESACTIVADO";
+        await reply(`🔗 *Antilink WhatsApp:* ${estado}\n\n*!antilink on* — activar\n*!antilink off* — desactivar`);
+      }
+    },
+  },
+
+  // ── !antired ─── antilink por red social ──────────────────────
+  {
+    name: "antired",
+    alias: ["antiredes", "antisocial"],
+    description: "Activa/desactiva antilink por red social específica",
     category: "Grupo Admin",
     execute: async ({ sock, from, reply, sender, args, isOwner }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       const isAdmin = await senderIsAdmin(sock, from, sender);
       if (!isAdmin && !isOwner) return reply("🔒 Solo admins pueden usar este comando.");
 
-      const sub = (args[0] || "").toLowerCase();
-      if (sub === "on" || sub === "activar") {
-        antilinkGroups.add(from);
-        saveAntilinkGroups();
-        await reply("🔗 *Antilink ACTIVADO* ✅\nLos links enviados por no-admins serán eliminados y el usuario advertido.");
-      } else if (sub === "off" || sub === "desactivar") {
-        antilinkGroups.delete(from);
-        saveAntilinkGroups();
-        await reply("🔗 *Antilink DESACTIVADO* ❌\nAhora se permiten links en el grupo.");
+      const redes = Object.keys(REDES_REGEX);
+      const red = (args[0] || "").toLowerCase();
+      const accion = (args[1] || "").toLowerCase();
+
+      // Ver estado de todas
+      if (!red || red === "status" || red === "estado") {
+        const cfg = antilinkRedes[from] || {};
+        const lista = redes.map((r) => `${cfg[r] ? "✅" : "❌"} ${r}`).join("\n");
+        return reply(`📵 *Antilink Redes — Estado*\n\n${lista}\n\n*Uso:* !antired [red] [on/off]\nEj: !antired tiktok on`);
+      }
+
+      if (!redes.includes(red)) {
+        return reply(`❌ Red no válida. Opciones:\n${redes.join(", ")}`);
+      }
+
+      if (accion === "on" || accion === "activar") {
+        if (!antilinkRedes[from]) antilinkRedes[from] = {};
+        antilinkRedes[from][red] = true;
+        saveAntilinkRedes();
+        await reply(`📵 *Anti-${red} ACTIVADO* ✅\nExpulsaré a quien mande links de ${red} (excepto admins).`);
+      } else if (accion === "off" || accion === "desactivar") {
+        if (!antilinkRedes[from]) antilinkRedes[from] = {};
+        antilinkRedes[from][red] = false;
+        saveAntilinkRedes();
+        await reply(`📵 *Anti-${red} DESACTIVADO* ❌`);
       } else {
-        const estado = antilinkGroups.has(from) ? "✅ ACTIVADO" : "❌ DESACTIVADO";
-        await reply(`🔗 *Antilink:* ${estado}\n\nUso:\n*!antilink on* — activar\n*!antilink off* — desactivar`);
+        const estado = antilinkRedes[from]?.[red] ? "✅ ACTIVADO" : "❌ DESACTIVADO";
+        await reply(`📵 *Anti-${red}:* ${estado}\n\n!antired ${red} on — activar\n!antired ${red} off — desactivar`);
       }
     },
   },
@@ -365,7 +482,7 @@ const groupCommands = [
     category: "Owner",
     ownerOnly: true,
     execute: async ({ reply }) => {
-      await reply("♻️ *Reiniciando RAGE-BOT...*\n_Vuelvo en unos segundos._");
+      await reply("♻️ *Reiniciando PRAGMATA BOT...*\n_Vuelvo en unos segundos._");
       setTimeout(() => process.exit(0), 1500);
     },
   },
@@ -378,16 +495,38 @@ const groupCommands = [
     execute: async ({ sock, reply, text }) => {
       if (!text) return reply("📢 Escribe el mensaje.\nEj: *!broadcast Hola a todos!*");
       try {
-        const chats = Object.keys(await sock.chats.all());
-        let enviados = 0;
-        for (const jid of chats) {
-          if (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us")) {
-            await sock.sendMessage(jid, { text: `📢 *Mensaje del creador:*\n\n${text}` });
-            enviados++;
-            await new Promise((r) => setTimeout(r, 500));
+        // sock.chats.all() no existe en Baileys moderno — usamos el store de chats directamente
+        const rawChats = sock.chats?.all?.()
+          ?? (sock.store?.chats ? Object.values(sock.store.chats) : null)
+          ?? (sock.chatsMap ? [...sock.chatsMap.keys()] : null);
+
+        let jids = [];
+        if (rawChats && typeof rawChats[Symbol.iterator] === "function") {
+          for (const c of rawChats) {
+            const id = typeof c === "string" ? c : (c?.id ?? c?.jid);
+            if (id && (id.endsWith("@s.whatsapp.net") || id.endsWith("@g.us"))) jids.push(id);
           }
         }
-        await reply(`✅ Mensaje enviado a *${enviados}* chats.`);
+
+        // Fallback: obtener grupos activos donde el bot participa
+        if (jids.length === 0) {
+          try {
+            const grupos = await sock.groupFetchAllParticipating();
+            jids = Object.keys(grupos);
+          } catch {}
+        }
+
+        if (jids.length === 0) return reply("⚠️ No se encontraron chats para enviar el broadcast.\nEl bot necesita haber recibido mensajes primero.");
+
+        let enviados = 0;
+        for (const jid of jids) {
+          try {
+            await sock.sendMessage(jid, { text: `📢 *Mensaje del creador:*\n\n${text}` });
+            enviados++;
+            await new Promise((r) => setTimeout(r, 600));
+          } catch {}
+        }
+        await reply(`✅ Broadcast enviado a *${enviados}* chats.`);
       } catch (err) {
         await reply(`❌ Error: ${err.message}`);
       }
@@ -400,7 +539,7 @@ const groupCommands = [
     category: "Owner",
     ownerOnly: true,
     execute: async ({ sock, reply, text }) => {
-      if (!text) return reply("✏️ Escribe el nuevo estado.\nEj: *!estado RAGE-BOT activo 🤖*");
+      if (!text) return reply("✏️ Escribe el nuevo estado.\nEj: *!estado PRAGMATA BOT activo 🤖*");
       try {
         await sock.updateProfileStatus(text);
         await reply(`✅ *Estado actualizado:*\n"${text}"`);
@@ -415,6 +554,7 @@ const groupCommands = [
     alias: ["ship", "amor", "couple"],
     description: "Forma una pareja aleatoria del grupo 💕",
     category: "Grupo",
+    freeAllowed: true,
     execute: async ({ sock, from, reply, msg }) => {
       if (!isGroup(from)) return reply("❌ Solo funciona en grupos.");
       try {
@@ -438,6 +578,26 @@ const groupCommands = [
       } catch {
         await reply("❌ No pude obtener los miembros del grupo.");
       }
+    },
+  },
+
+  // ── !welcome on/off ───────────────────────────
+  {
+    name: "welcome",
+    alias: ["bienvenida"],
+    description: "Activa/desactiva mensaje de bienvenida en el grupo",
+    category: "Grupos",
+    adminOnly: true,
+    execute: async ({ reply, from, args }) => {
+      const sub = (args[0] || "").toLowerCase();
+      if (!["on", "off"].includes(sub)) return reply("⚙️ Uso: *!welcome on* o *!welcome off*");
+      const active = sub === "on";
+      if (active) { welcomeGroups.add(from); } else { welcomeGroups.delete(from); }
+      saveWelcomeGroups();
+      await reply(active
+        ? "✅ *Bienvenida activada*\nSaludaré a los nuevos miembros automáticamente 👋"
+        : "❌ *Bienvenida desactivada*"
+      );
     },
   },
 ];

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//     RAGE-BOT — src/commands/musica.js
+//     PRAGMATA BOT — src/commands/musica.js
 //   Descargar canciones como AUDIO (mp3)
 // ═══════════════════════════════════════════
 

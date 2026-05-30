@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════
 
 const config = {
-  botName: "RAGE-BOT",
+  botName: "PRAGMATA BOT",
   botVersion: "3.0.8",
   prefix: "!",
 
@@ -26,12 +26,24 @@ const config = {
   // ── Comunidad ──────────────────────────
   communityLink: "https://whatsapp.com/channel/0029VbADsUx6LwHo4wdirM0v",
 
+  // ── Grupo oficial RPG ──────────────────
+  // Pon aquí el link de invitación de tu grupo RPG
+  // Si lo dejas vacío (""), el bot NO enviará el aviso automático al registrarse
+  rpgGroupLink: "",
+
   // ── Sistema ────────────────────────────
   waitMessage: "⏳ Procesando...",
   errorMessage: "❌ Ocurrió un error. Inténtalo de nuevo.",
   workInGroups: true,
   workInPrivate: true,
   cooldown: 3,
+
+  // ── APIs externas ──────────────────────
+  anthropicApiKey: "TU_API_KEY_AQUI",   // https://console.anthropic.com
+
+  // ── Sticker metadata ───────────────────
+  stickerPackname: "PRAGMATA BOT🤖⚡\nhttps://arcadia-inc.com\n\nInfo:\nadquiere el bot: +51 917 611 323",
+  stickerAuthor: "Owner:\n\nZemo - ArcadiaCorp",
 
   // ── Antilink ───────────────────────────
   antilinkDefaultOn: false,

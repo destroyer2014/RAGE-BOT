@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//    RAGE-BOT — src/commands/utilidades.js
+//    PRAGMATA BOT — src/commands/utilidades.js
 //     Comandos útiles inspirados en GataBot
 // ═══════════════════════════════════════════
 
@@ -12,8 +12,8 @@ const utilCommands = [
   // !clima — Clima de una ciudad
   // ────────────────────────────────────────
   {
-    name: "clima",
-    alias: ["weather", "tiempo"],
+    name: "tiempo",
+    alias: ["weather-basic", "climabasico"],
     description: "Clima de una ciudad",
     category: "Utilidades",
     execute: async ({ reply, react, text }) => {
@@ -89,7 +89,7 @@ const utilCommands = [
   // !dado — Dado con cantidad de caras
   // ────────────────────────────────────────
   {
-    name: "dado",
+    name: "dado2",
     alias: ["dice", "roll"],
     description: "Tira un dado (ej: !dado 20 para dado de 20)",
     category: "Diversión",
@@ -167,45 +167,11 @@ const utilCommands = [
   },
 
   // ────────────────────────────────────────
-  // !pokemon — Info de un Pokémon
-  // ────────────────────────────────────────
-  {
-    name: "pokemon",
-    alias: ["poke", "pokedex"],
-    description: "Info de un Pokémon",
-    category: "Utilidades",
-    execute: async ({ reply, react, text }) => {
-      if (!text) return reply("🔍 Escribe el nombre o número.\nEj: *!pokemon pikachu*");
-      await react("⚡");
-      try {
-        const query = text.toLowerCase().trim().replace(/ /g, "-");
-        const res = await axios.get(`https://pokeapi.co/api/v2/pokemon/${query}`, { timeout: 10000 });
-        const p = res.data;
-        const nombre = p.name.charAt(0).toUpperCase() + p.name.slice(1);
-        const tipos = p.types.map((t) => t.type.name).join(", ");
-        const stats = p.stats.map((s) => `  ${s.stat.name}: *${s.base_stat}*`).join("\n");
-        const altura = (p.height / 10).toFixed(1);
-        const peso = (p.weight / 10).toFixed(1);
-
-        await reply(
-          `⚡ *${nombre}* #${p.id}\n━━━━━━━━━━━━━━\n` +
-          `🏷️ Tipo: *${tipos}*\n` +
-          `📏 Altura: *${altura}m*\n` +
-          `⚖️ Peso: *${peso}kg*\n\n` +
-          `📊 *Stats base:*\n${stats}`
-        );
-      } catch {
-        await reply("❌ No encontré ese Pokémon. Verifica el nombre.");
-      }
-    },
-  },
-
-  // ────────────────────────────────────────
   // !moneda — Cara o sello mejorado
   // ────────────────────────────────────────
   {
-    name: "moneda",
-    alias: ["coin", "flipcoin", "careosello"],
+    name: "flipcoin",
+    alias: ["careosello"],
     description: "Cara o sello",
     category: "Diversión",
     execute: async ({ reply }) => {

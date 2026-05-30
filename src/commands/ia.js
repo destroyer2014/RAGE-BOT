@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//       RAGE-BOT — src/commands/ia.js
+//       PRAGMATA BOT — src/commands/ia.js
 //         Chat con IA (Groq) + Voz
 //              v1.1.0
 // ═══════════════════════════════════════════
@@ -22,7 +22,7 @@ async function askGroq(prompt) {
     const messages = [
       {
         role: "system",
-        content: "Eres RAGE-BOT, un asistente de WhatsApp divertido, directo y útil. Responde siempre en español de forma concisa, máximo 3 párrafos.",
+        content: "Eres PRAGMATA BOT, un asistente de WhatsApp divertido, directo y útil. Responde siempre en español de forma concisa, máximo 3 párrafos.",
       },
       { role: "user", content: prompt },
     ];
