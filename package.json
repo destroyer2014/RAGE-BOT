@@ -6,8 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "postinstall": "pip install yt-dlp --break-system-packages"
   },
+
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.9",
