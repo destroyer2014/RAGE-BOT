@@ -11,13 +11,25 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
-// ── Verifica si yt-dlp está instalado ───────
+// ── Verifica e instala yt-dlp si no está ────
 function ytdlpAvailable() {
   try {
     execSync("yt-dlp --version", { stdio: "pipe" });
     return true;
   } catch {
-    return false;
+    try {
+      execSync("pip install yt-dlp --break-system-packages -q", { stdio: "pipe", timeout: 60000 });
+      execSync("yt-dlp --version", { stdio: "pipe" });
+      return true;
+    } catch {
+      try {
+        execSync("pip3 install yt-dlp --break-system-packages -q", { stdio: "pipe", timeout: 60000 });
+        execSync("yt-dlp --version", { stdio: "pipe" });
+        return true;
+      } catch {
+        return false;
+      }
+    }
   }
 }
 
