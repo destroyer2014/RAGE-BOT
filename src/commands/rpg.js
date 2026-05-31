@@ -24,8 +24,8 @@ import {
   calcularTitulo, getTitulosDesbloqueados, actualizarTopRpg, actualizarTopArena, TITULOS,
   MEJORA_STATS, MEJORA_STAT_EMOJI, MEJORA_STAT_NOMBRE, MEJORA_MAX_NIVEL,
   MEJORA_STAT_GANANCIA, MEJORA_EQUIPO_GANANCIA,
-  calcCostoMejora, calcCostoMejoraMultiple, getNivelMejoraStat, getNivelMejoraEquipo,
-  aplicarMejoraStat, aplicarMejoraEquipo, aplicarMejoraStatMultiple, aplicarMejoraEquipoMultiple,
+  calcCostoMejora, getNivelMejoraStat, getNivelMejoraEquipo,
+  aplicarMejoraStat, aplicarMejoraEquipo,
   CAMBIO_CLASE_COSTO_ORO, CAMBIO_CLASE_COSTO_GEMAS, CAMBIO_CLASE_PENALIDAD_XP, cambiarClase,
   TORRE_MAX_GRUPO, TORRE_INVITE_TIMEOUT, TORRE_JEFES, TORRE_MAX_PISOS, TORRE_COOLDOWN_MUERTE,
   getTorreEstado, getTorreGrupo, saveTorreGrupo, getTorreInvites, saveTorreInvite,
@@ -52,32 +52,8 @@ import {
   getBuzon, leerMensajeBuzon, reclamarRecompensaBuzon, mensajesSinLeer,
   // Clan skills
   CLAN_SKILLS, costoSkillClan, getClanSkills, getClanSkillBonus, donarMedallasClan, mejorarSkillClan, inicializarBancoMedallas,
-  // Tienda por clase
-  TIENDA_CLASE,
 } from "../lib/rpg-database.js";
 import axios from "axios";
-import { isOwner } from "../lib/utils.js";
-import { tmpdir } from "os";
-import { join } from "path";
-import { writeFile, unlink, readFile } from "fs/promises";
-import { exec } from "child_process";
-import { promisify } from "util";
-const _execAsync = promisify(exec);
-
-// ── TTS femenino Google (sin API key) ─────────────────────────
-async function _divinaTTS(texto) {
-  const encoded = encodeURIComponent(texto.substring(0, 200));
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=es&client=tw-ob&q=${encoded}`;
-  const res = await axios.get(url, { responseType: "arraybuffer", headers: { "User-Agent": "Mozilla/5.0" }, timeout: 10000 });
-  const tmpMp3 = join(tmpdir(), `divina_${Date.now()}.mp3`);
-  const tmpOgg = tmpMp3.replace(".mp3", ".ogg");
-  await writeFile(tmpMp3, Buffer.from(res.data));
-  await _execAsync(`ffmpeg -i "${tmpMp3}" -c:a libopus -b:a 64k "${tmpOgg}" -y`, { timeout: 15000 });
-  const buf = await readFile(tmpOgg);
-  try { await unlink(tmpMp3); } catch {}
-  try { await unlink(tmpOgg); } catch {}
-  return buf;
-}
 
 const CD_EXPLORACION = 2 * 60 * 1000;
 const CD_MISION      = 24 * 60 * 60 * 1000;
@@ -107,24 +83,18 @@ function barra(actual, max, largo = 10) {
 
 function calcCrit(player) {
   const clase = CLASES[player.clase];
-  let crit = (player.crit || clase?.crit || 3); // base: clase o 3%
+  const base = (player.crit || clase?.crit || 3); // reducido de 5% a 3% base
+  let bonus = 0;
   // Bonus de mascota equipada
   if (player.mascota) {
     const mascota = MASCOTAS[player.mascota]
       || (player._ssrMascotas && player._ssrMascotas[player.mascota]);
-    if (mascota) crit += (mascota.bonus?.crit || 0);
+    if (mascota) bonus += (mascota.bonus?.crit || 0);
   }
   // Bonus de accesorio
   const acc = player.equipo?.accesorio;
-  if (acc) crit += (TIENDA[acc]?.crit || 0);
-  // Buff de suerte aplica +crit
-  const buffs = player.buffs || {};
-  if (buffs.suerte && buffs.suerte.expira > Date.now()) crit += buffs.suerte.valor;
-  // Clan skill damage (crit)
-  if (player.clan && db?.guilds?.[player.clan]?.skills?.damage) {
-    crit += db.guilds[player.clan].skills.damage;
-  }
-  return Math.min(80, crit);
+  if (acc) bonus += (TIENDA[acc]?.crit || 0);
+  return base + bonus;
 }
 
 function calcDodge(player) {
@@ -138,6 +108,18 @@ function calcDodge(player) {
     dodge += db.guilds[player.clan].skills.dodge;
   }
   return Math.min(60, dodge); // cap sube a 60 con buffs
+}
+
+function calcCrit(player) {
+  let crit = player.crit || 3;
+  // Buff de suerte aplica +crit
+  const buffs = player.buffs || {};
+  if (buffs.suerte && buffs.suerte.expira > Date.now()) crit += buffs.suerte.valor;
+  // Clan skill damage (crit)
+  if (player.clan && db?.guilds?.[player.clan]?.skills?.damage) {
+    crit += db.guilds[player.clan].skills.damage;
+  }
+  return Math.min(80, crit);
 }
 
 function simularCombate(atacante, defensor) {
@@ -164,62 +146,6 @@ function simularCombate(atacante, defensor) {
 function calidadTag(calidad) {
   const c = CALIDAD[calidad];
   return c ? c.emoji + " *" + c.nombre + "*" : "";
-}
-
-// ── Protección divina contra atacar owners ─────────────────────
-const _DIOS_INTENTOS = {}; // jid → intentos
-const _DIOS_MSG = [
-  "Estás intentando atacar a un dios más poderoso que Asharot. Te aconsejo que te detengas... o atente a las consecuencias.",
-  "Insensato. Vuelves a desafiar a un ser divino. Esta es tu última advertencia.",
-  "Lo elegiste tú. Que los dioses tengan piedad de tu alma... porque yo no la tendré.",
-];
-
-async function _checkDiosProteccion(atacanteJid, victimJid, p1, sock, from, msg, reply) {
-  if (!isOwner(victimJid)) return false; // no es owner, dejar pasar
-  const intentos = (_DIOS_INTENTOS[atacanteJid] || 0) + 1;
-  _DIOS_INTENTOS[atacanteJid] = intentos;
-
-  const numero = atacanteJid.split("@")[0];
-  const msgIdx = Math.min(intentos - 1, 2);
-  const texto = _DIOS_MSG[msgIdx];
-
-  // Enviar mensaje de texto
-  await reply(
-    "⚡ *[ ADVERTENCIA DIVINA ]*\n" +
-    "━━━━━━━━━━━━━━━━━━━━━━━\n" +
-    "☠️ " + texto + "\n" +
-    "━━━━━━━━━━━━━━━━━━━━━━━\n" +
-    "_Intentos: " + intentos + "/3_"
-  );
-
-  // Enviar audio de voz femenina
-  try {
-    const audioBuf = await _divinaTTS(texto);
-    await sock.sendMessage(from, { audio: audioBuf, mimetype: "audio/ogg; codecs=opus", ptt: true }, { quoted: msg });
-  } catch {}
-
-  // Al tercer intento: matar al atacante
-  if (intentos >= 3) {
-    _DIOS_INTENTOS[atacanteJid] = 0;
-    p1.hp = 0;
-    savePlayer(p1);
-    await sock.sendMessage(from, {
-      text:
-        "💀 *[ CASTIGO DIVINO ]*\n" +
-        "━━━━━━━━━━━━━━━━━━━━━━━\n" +
-        "@" + numero + " fue *fulminado* por desafiar a los dioses.\n" +
-        "Se te advirtió tres veces.\n\n" +
-        "☠️ *Has muerto.* Usa `!rpgdescansar` para recuperarte.\n" +
-        "━━━━━━━━━━━━━━━━━━━━━━━\n" +
-        "_Que esto sea una lección para los mortales._",
-      mentions: [atacanteJid],
-    }, { quoted: msg });
-    try {
-      const audioMuerte = await _divinaTTS("Se te advirtió tres veces, mortal. Ahora sufre las consecuencias de desafiar a un dios.");
-      await sock.sendMessage(from, { audio: audioMuerte, mimetype: "audio/ogg; codecs=opus", ptt: true }, { quoted: msg });
-    } catch {}
-  }
-  return true; // bloquear el ataque
 }
 
 const rpgCommands = [
@@ -481,10 +407,10 @@ const rpgCommands = [
       if (!p || !p.clase) return reply("❌ Sin personaje RPG.");
       const clase  = CLASES[p.clase];
       const arma = p.equipo.arma
-        ? TIENDA[p.equipo.arma] || TIENDA_CLASE[p.equipo.arma] || (p._ssrItems && p._ssrItems[p.equipo.arma]) || null
+        ? TIENDA[p.equipo.arma] || (p._ssrItems && p._ssrItems[p.equipo.arma]) || null
         : null;
       const arm = p.equipo.armadura
-        ? TIENDA[p.equipo.armadura] || TIENDA_CLASE[p.equipo.armadura] || (p._ssrItems && p._ssrItems[p.equipo.armadura]) || null
+        ? TIENDA[p.equipo.armadura] || (p._ssrItems && p._ssrItems[p.equipo.armadura]) || null
         : null;
       const acc    = p.equipo.accesorio ? TIENDA[p.equipo.accesorio] : null;
       const mascota = p.mascota
@@ -882,8 +808,6 @@ const rpgCommands = [
       const p2 = db.players[rival];
       if (!p1.clase) return reply("❌ Sin personaje.");
       if (!p2?.clase) return reply("❌ Ese jugador no tiene personaje.");
-      // 🛡️ Protección divina — owners
-      if (await _checkDiosProteccion(sender, rival, p1, sock, from, msg, reply)) return;
       if (p1.hp <= 0) return reply("❌ Estás muerto. Usa `!rpgdescansar`.");
       if (p2.hp <= 0) return reply("❌ Ese jugador ya está muerto.");
       if (p1.afk) return reply("😴 Estás en modo AFK. Usa `!rpgafk off` primero.");
@@ -1086,8 +1010,8 @@ const rpgCommands = [
         "╭━━━━━━━━━━━━━━━━━━━━━━━╮\n" +
         "┃        🎒  *INVENTARIO*        ┃\n" +
         "╰━━━━━━━━━━━━━━━━━━━━━━━╯\n" +
-        `🗡️ Arma equipada: ${p.equipo.arma ? ((TIENDA[p.equipo.arma] || TIENDA_CLASE[p.equipo.arma] || (p._ssrItems && p._ssrItems[p.equipo.arma]))?.nombre || p.equipo.arma) : "Ninguna"}\n` +
-        `🛡️ Armadura equipada: ${p.equipo.armadura ? ((TIENDA[p.equipo.armadura] || TIENDA_CLASE[p.equipo.armadura] || (p._ssrItems && p._ssrItems[p.equipo.armadura]))?.nombre || p.equipo.armadura) : "Ninguna"}\n` +
+        `🗡️ Arma equipada: ${p.equipo.arma ? (TIENDA[p.equipo.arma]?.nombre || p.equipo.arma) : "Ninguna"}\n` +
+        `🛡️ Armadura equipada: ${p.equipo.armadura ? (TIENDA[p.equipo.armadura]?.nombre || p.equipo.armadura) : "Ninguna"}\n` +
         `📿 Accesorio equipado: ${p.equipo.accesorio ? (TIENDA[p.equipo.accesorio]?.nombre || p.equipo.accesorio) : "Ninguno"}\n` +
         "━━━━━━━━━━━━━━\n" +
         `⚔️ Armas: *${armas}* | 🛡️ Armaduras: *${armaduras}*\n` +
@@ -1308,14 +1232,14 @@ const rpgCommands = [
         return "│ `" + id + "` " + cal.emoji + " " + v.emoji + " *" + v.nombre + "* — " + v.precio + "💰 (Nv." + v.nivelReq + "+)";
       };
 
-      const tipos = ["arma","armadura","accesorio","pocion","pocion_buff"];
+      const tipos = ["arma","armadura","accesorio","pocion"];
       let texto = "🛒 *TIENDA RPG*\n━━━━━━━━━━━━━━\n💰 Tu oro: *" + p.oro + "*\n\n";
 
       for (const tipo of tipos) {
         let items = Object.entries(TIENDA).filter(([,v]) => v.tipo === tipo);
         if (filtroReal) items = items.filter(([,v]) => v.calidad === filtroReal);
         if (!items.length) continue;
-        const emojis = { arma:"⚔️", armadura:"🛡️", accesorio:"📿", pocion:"🧪", pocion_buff:"✨" };
+        const emojis = { arma:"⚔️", armadura:"🛡️", accesorio:"📿", pocion:"🧪" };
         texto += emojis[tipo] + " *" + tipo.toUpperCase() + "S*\n" + items.map(fmt).join("\n") + "\n\n";
       }
 
@@ -1334,60 +1258,22 @@ const rpgCommands = [
   {
     name: "rpgcomprar",
     alias: ["rpgbuy"],
-    description: "Comprar item — !rpgcomprar [id] [cantidad]",
+    description: "Comprar item — !rpgcomprar [id]",
     category: "RPG ⚔️",
     freeAllowed: true,
     execute: async ({ reply, react, sender, args, msg, pushName}) => {
       const p = getPlayer(sender, pushName || msg?.pushName || null);
       if (!p.clase) return reply("❌ Sin personaje.");
       const itemId = (args[0]||"").toLowerCase();
-      // Buscar en TIENDA general y en TIENDA_CLASE
-      const item = TIENDA[itemId] || TIENDA_CLASE[itemId];
+      const item = TIENDA[itemId];
       if (!item) return reply("❌ Item no existe. Usa `!rpgtienda` para ver el catálogo.");
-      // Verificar restricción de clase
-      if (item.clase && item.clase !== p.clase) {
-        const claseNombre = item.clase.charAt(0).toUpperCase() + item.clase.slice(1);
-        return reply("❌ *" + item.emoji + " " + item.nombre + "* es exclusivo para la clase *" + claseNombre + "*\nTu clase es *" + p.clase + "*. Usa `!rpgtienda` para ver tu tienda.");
-      }
       if (p.nivel < (item.nivelReq||1)) return reply("❌ Necesitas nivel *" + item.nivelReq + "* para comprar este item.");
-
-      // Cantidad (x1/x5/x10 solo para pociones y orbes)
-      const tiposMulti = ["pocion", "pocion_buff", "orbe_stat", "orbe_equipo"];
-      const cantidadRaw = parseInt(args[1]) || 1;
-      let cantidad = 1;
-      if (tiposMulti.includes(item.tipo)) {
-        if (![1, 5, 10].includes(cantidadRaw)) {
-          return reply("❌ Cantidad inválida. Para pociones y orbes puedes comprar: *x1, x5 o x10*\nEj: `!rpgcomprar orbe_azul 5`");
-        }
-        cantidad = cantidadRaw;
-      }
-
-      const costoTotal = item.precio * cantidad;
-      if (p.oro < costoTotal) {
-        const falta = costoTotal - p.oro;
-        return reply(
-          "❌ No tienes oro suficiente.\n" +
-          "💰 Precio x" + cantidad + ": *" + costoTotal + "*\n" +
-          "💰 Tienes: *" + p.oro + "*\n" +
-          "💸 Te faltan: *" + falta + "*"
-        );
-      }
-
-      p.oro -= costoTotal;
-      p.inventario[itemId] = (p.inventario[itemId]||0) + cantidad;
+      if (p.oro < item.precio) return reply("❌ Necesitas " + item.precio + "💰, tienes " + p.oro + "💰.");
+      p.oro -= item.precio;
+      p.inventario[itemId] = (p.inventario[itemId]||0) + 1;
       savePlayer(p);
       await react("✅");
-
-      if (cantidad > 1) {
-        await reply(
-          "✅ Compraste *x" + cantidad + "* " + calidadTag(item.calidad) + " " + item.emoji + " *" + item.nombre + "*\n" +
-          "💰 Costo total: *" + costoTotal + "* (" + item.precio + " c/u)\n" +
-          "💰 Oro restante: *" + p.oro + "*\n" +
-          "🎒 Tienes ahora: *" + p.inventario[itemId] + "* en inventario"
-        );
-      } else {
-        await reply("✅ Compraste " + calidadTag(item.calidad) + " " + item.emoji + " *" + item.nombre + "* por " + item.precio + "💰\n💰 Restante: " + p.oro);
-      }
+      await reply("✅ Compraste " + calidadTag(item.calidad) + " " + item.emoji + " *" + item.nombre + "* por " + item.precio + "💰\n💰 Restante: " + p.oro);
     },
   },
 
@@ -1524,8 +1410,8 @@ const rpgCommands = [
       if (!p.clase) return reply("❌ Sin personaje.");
       const itemId = (args[0]||"").toLowerCase();
 
-      // Resolver el item: tienda normal, tienda clase, SSR arma gacha, SSR armadura banner, o item especial torre
-      let item = TIENDA[itemId] || TIENDA_CLASE[itemId];
+      // Resolver el item: tienda normal, SSR arma gacha, SSR armadura banner, o item especial torre
+      let item = TIENDA[itemId];
       let esSSR = false;
       if (!item) {
         // Buscar en _ssrItems (incluye armadura_astaroth y cualquier SSR)
@@ -1671,23 +1557,13 @@ const rpgCommands = [
           "╰━━━━━━━━━━━━━━━━━━━╯\n\n" +
           "🔵 Orbes Azul: *" + orbesAzul + "* | 💰 Oro: *" + p.oro + "*\n\n" +
           lineas + "\n\n" +
-          "_Compra orbes: `!rpgcomprar orbe_azul [1/5/10]`_\n" +
-          "_Mejorar x1: `!rpgmejorar [stat]`_\n" +
-          "_Mejorar x5/x10: `!rpgmejorar [stat] 5`_\n" +
+          "_Compra orbes: `!rpgcomprar orbe_azul`_\n" +
+          "_Mejorar: `!rpgmejorar [stat]`_\n" +
           "_Stats: atk, def, hp, spd, crit_"
         );
       }
 
-      // Cantidad: x1 x5 x10
-      const cantRaw = parseInt(args[1]) || 1;
-      if (![1, 5, 10].includes(cantRaw)) return reply("❌ Cantidad inválida. Usa: *1, 5 o 10*\nEj: `!rpgmejorar atk 5`");
-
-      let resultado;
-      if (cantRaw === 1) {
-        resultado = aplicarMejoraStat(p, stat);
-      } else {
-        resultado = aplicarMejoraStatMultiple(p, stat, cantRaw);
-      }
+      const resultado = aplicarMejoraStat(p, stat);
       await react(resultado.ok ? "🔵" : "❌");
       await reply(resultado.msg);
     },
@@ -1734,22 +1610,12 @@ const rpgCommands = [
           "╰━━━━━━━━━━━━━━━━━━━╯\n\n" +
           "🟡 Orbes Dorado: *" + orbesDorado + "* | 💰 Oro: *" + p.oro + "*\n\n" +
           lineas.join("\n") + "\n\n" +
-          "_Compra orbes: `!rpgcomprar orbe_dorado [1/5/10]`_\n" +
-          "_Mejorar x1: `!rpgmejorarequipo [arma/armadura] [atk/def]`_\n" +
-          "_Mejorar x5/x10: `!rpgmejorarequipo [arma/armadura] [atk/def] 5`_"
+          "_Compra orbes: `!rpgcomprar orbe_dorado`_\n" +
+          "_Mejorar: `!rpgmejorarequipo [arma/armadura] [atk/def]`_"
         );
       }
 
-      // Cantidad: x1 x5 x10
-      const cantRaw = parseInt(args[2]) || 1;
-      if (![1, 5, 10].includes(cantRaw)) return reply("❌ Cantidad inválida. Usa: *1, 5 o 10*\nEj: `!rpgmejorarequipo arma atk 5`");
-
-      let resultado;
-      if (cantRaw === 1) {
-        resultado = aplicarMejoraEquipo(p, slot, stat);
-      } else {
-        resultado = aplicarMejoraEquipoMultiple(p, slot, stat, cantRaw);
-      }
+      const resultado = aplicarMejoraEquipo(p, slot, stat);
       await react(resultado.ok ? "🟡" : "❌");
       await reply(resultado.msg);
     },
@@ -3078,25 +2944,25 @@ Retirando ${cantidadFinal}💰...`);
       if (getBossActivo()) return reply("❌ Ya hay un jefe activo: *" + getBossActivo().nombre + "* con " + getBossActivo().hp + "/" + getBossActivo().hpMax + " HP");
       const bosses = [
         // Nivel 1 — Fácil: stats jugador afectan 10%
-        { nombre: "Slime Gigante",            emoji: "🟢", nivel: 1,  hpMax: 800,   atk: 20,  def: 8,   statPct: 0.15, recompensa: { oro: 200,   exp: 150,  drop: "comun"      } },
-        // Nivel 2
-        { nombre: "Troll del Bosque",         emoji: "🧌", nivel: 2,  hpMax: 2000,  atk: 45,  def: 22,  statPct: 0.15, recompensa: { oro: 450,   exp: 350,  drop: "raro"       } },
-        // Nivel 3
-        { nombre: "Dragón Joven",             emoji: "🐉", nivel: 3,  hpMax: 4000,  atk: 72,  def: 38,  statPct: 0.15, recompensa: { oro: 800,   exp: 620,  drop: "epico"      } },
-        // Nivel 4
-        { nombre: "Golem de Hierro",          emoji: "🤖", nivel: 4,  hpMax: 7000,  atk: 100, def: 60,  statPct: 0.15, recompensa: { oro: 1200,  exp: 950,  drop: "epico"      } },
-        // Nivel 5
-        { nombre: "Lich Eterno",              emoji: "💀", nivel: 5,  hpMax: 11000, atk: 130, def: 80,  statPct: 0.15, recompensa: { oro: 1800,  exp: 1400, drop: "legendario" } },
-        // Nivel 6
-        { nombre: "Fénix Oscuro",             emoji: "🔥", nivel: 6,  hpMax: 16000, atk: 165, def: 100, statPct: 0.15, recompensa: { oro: 2600,  exp: 2000, drop: "legendario" } },
-        // Nivel 7
-        { nombre: "Titán del Caos",           emoji: "⚡", nivel: 7,  hpMax: 22000, atk: 200, def: 125, statPct: 0.15, recompensa: { oro: 3500,  exp: 2800, drop: "legendario" } },
-        // Nivel 8
-        { nombre: "Señor Demonio",            emoji: "👿", nivel: 8,  hpMax: 30000, atk: 240, def: 155, statPct: 0.15, recompensa: { oro: 5000,  exp: 4000, drop: "mitico"     } },
-        // Nivel 9
-        { nombre: "Dios Caído",               emoji: "🌑", nivel: 9,  hpMax: 42000, atk: 290, def: 190, statPct: 0.15, recompensa: { oro: 7500,  exp: 6000, drop: "mitico"     } },
-        // Nivel 10 — Legendario
-        { nombre: "ASTAROTH — El Primigenio", emoji: "👁️", nivel: 10, hpMax: 65000, atk: 380, def: 250, statPct: 0.15, recompensa: { oro: 15000, exp: 12000, drop: "mitico" } },
+        { nombre: "Slime Gigante",        emoji: "🟢", nivel: 1,  hpMax: 800,   atk: 20,  def: 8,   statPct: 0.10, recompensa: { oro: 200,   exp: 150,  drop: "comun"      } },
+        // Nivel 2 — Fácil-Medio: 15%
+        { nombre: "Troll del Bosque",     emoji: "🧌", nivel: 2,  hpMax: 2000,  atk: 45,  def: 22,  statPct: 0.15, recompensa: { oro: 450,   exp: 350,  drop: "raro"       } },
+        // Nivel 3 — Medio: 20%
+        { nombre: "Dragón Joven",         emoji: "🐉", nivel: 3,  hpMax: 4000,  atk: 72,  def: 38,  statPct: 0.20, recompensa: { oro: 800,   exp: 620,  drop: "epico"      } },
+        // Nivel 4 — Medio-Difícil: 25%
+        { nombre: "Golem de Hierro",      emoji: "🤖", nivel: 4,  hpMax: 7000,  atk: 100, def: 60,  statPct: 0.25, recompensa: { oro: 1200,  exp: 950,  drop: "epico"      } },
+        // Nivel 5 — Difícil: 30%
+        { nombre: "Lich Eterno",          emoji: "💀", nivel: 5,  hpMax: 11000, atk: 130, def: 80,  statPct: 0.30, recompensa: { oro: 1800,  exp: 1400, drop: "legendario" } },
+        // Nivel 6 — Difícil: 35%
+        { nombre: "Fénix Oscuro",         emoji: "🔥", nivel: 6,  hpMax: 16000, atk: 165, def: 100, statPct: 0.35, recompensa: { oro: 2600,  exp: 2000, drop: "legendario" } },
+        // Nivel 7 — Muy difícil: 40%
+        { nombre: "Titán del Caos",       emoji: "⚡", nivel: 7,  hpMax: 22000, atk: 200, def: 125, statPct: 0.40, recompensa: { oro: 3500,  exp: 2800, drop: "legendario" } },
+        // Nivel 8 — Muy difícil: 45%
+        { nombre: "Señor Demonio",        emoji: "👿", nivel: 8,  hpMax: 30000, atk: 240, def: 155, statPct: 0.45, recompensa: { oro: 5000,  exp: 4000, drop: "mitico"     } },
+        // Nivel 9 — Extremo: 50%
+        { nombre: "Dios Caído",           emoji: "🌑", nivel: 9,  hpMax: 42000, atk: 290, def: 190, statPct: 0.50, recompensa: { oro: 7500,  exp: 6000, drop: "mitico"     } },
+        // Nivel 10 — Legendario: 60%
+        { nombre: "ASTAROTH — El Primigenio", emoji: "👁️", nivel: 10, hpMax: 65000, atk: 380, def: 250, statPct: 0.60, recompensa: { oro: 15000, exp: 12000, drop: "mitico" } },
       ];
       const idx = parseInt(args[0]);
       const boss = (!isNaN(idx) && idx >= 1 && idx <= bosses.length)
@@ -3192,10 +3058,8 @@ Retirando ${cantidadFinal}💰...`);
         // statPct: el % de stats del jugador que influye en la dificultad del boss
         // A mayor nivel de boss, sus stats escalan con los del jugador (parcialmente)
         const statPct = boss.statPct || 0;
-        // [NERF] Boss escala con nivel del PJ + 15% de sus stats
-        const nivelMult = 1 + (p.nivel - 1) * 0.02; // +2% por nivel del PJ
-        const bossAtkEfectivo = Math.floor((boss.atk + getTotalAtk(p) * statPct) * nivelMult);
-        const bossDefEfectivo = Math.floor((boss.def + getTotalDef(p) * statPct) * nivelMult);
+        const bossAtkEfectivo = Math.floor(boss.atk + getTotalAtk(p) * statPct);
+        const bossDefEfectivo = Math.floor(boss.def + getTotalDef(p) * statPct);
 
         // Daño del jugador al boss (contra DEF efectiva del boss)
         const dmgAlBoss = Math.max(1, Math.floor((atk - bossDefEfectivo * 0.3 + Math.random() * 15) * (crit ? 2 : 1)));
@@ -3248,16 +3112,6 @@ Retirando ${cantidadFinal}💰...`);
         savePlayer(p);
         saveBossActivo(boss);
         await react(esquivaBoss ? "💨" : crit ? "💥" : "⚔️");
-        await sock.sendMessage(from, {
-          text:
-            "⚔️ *@" + sender.split("@")[0] + "* atacó a " + boss.emoji + " *" + boss.nombre + "*\n" +
-            (crit ? "💥 *¡CRÍTICO!* " : "") + "Daño: *-" + dmgAlBoss + "*" + buffTexto + "\n" +
-            (esquivaBoss ? "💨 *¡ESQUIVASTE* el contraataque del boss!\n" : "💢 " + boss.nombre + " contraataca: *-" + dmgAlJugador + " HP*\n") + "\n" +
-            "❤️ Boss: [" + barra + "] " + boss.hp + "/" + boss.hpMax + " (" + pct + "%)\n" +
-            "❤️ Tu HP: " + p.hp + "/" + p.hpMax + "\n" +
-            "💥 Tu daño total: *" + boss.participantes[sender] + "*",
-          mentions: [sender],
-        }, { quoted: msg });
         return;
       }
 
@@ -4856,8 +4710,6 @@ const arenaCommand = {
 
     const rival = getPlayer(rivalId, null);
     if (!rival.clase) return reply("❌ El rival no tiene personaje.");
-    // 🛡️ Protección divina — owners
-    if (await _checkDiosProteccion(sender, rivalId, p, sock, from, msg, reply)) return;
 
     // Cooldown 5 minutos
     const ARENA_CD = 5 * 60 * 1000;
@@ -5080,11 +4932,11 @@ rpgCommands.push(...claseCommands);
 
 // Zonas AFK con tasas de recolección por minuto
 const AFK_ZONAS = [
-  { nombre: "🌲 Bosque Oscuro",    oroMin: 5,  oroMax: 13,  expMin: 7,  expMax: 17, dropChance: 0.14, zona: "bosque"   },
-  { nombre: "⛏️ Cueva del Dragón", oroMin: 10, oroMax: 23,  expMin: 13, expMax: 32, dropChance: 0.12, zona: "cueva"    },
-  { nombre: "🏰 Castillo Maldito", oroMin: 17, oroMax: 36,  expMin: 23, expMax: 51, dropChance: 0.10, zona: "castillo" },
-  { nombre: "🌋 Volcán del Caos",  oroMin: 26, oroMax: 57,  expMin: 36, expMax: 76, dropChance: 0.08, zona: "volcan"  },
-  { nombre: "🌑 Abismo Eterno",    oroMin: 42, oroMax: 95,  expMin: 55, expMax: 127, dropChance: 0.07, zona: "abismo"  },
+  { nombre: "🌲 Bosque Oscuro",    oroMin: 4,  oroMax: 10,  expMin: 5,  expMax: 13, dropChance: 0.12, zona: "bosque"   },
+  { nombre: "⛏️ Cueva del Dragón", oroMin: 8,  oroMax: 18,  expMin: 10, expMax: 25, dropChance: 0.10, zona: "cueva"    },
+  { nombre: "🏰 Castillo Maldito", oroMin: 13, oroMax: 28,  expMin: 18, expMax: 40, dropChance: 0.08, zona: "castillo" },
+  { nombre: "🌋 Volcán del Caos",  oroMin: 20, oroMax: 45,  expMin: 28, expMax: 60, dropChance: 0.06, zona: "volcan"  },
+  { nombre: "🌑 Abismo Eterno",    oroMin: 33, oroMax: 75,  expMin: 43, expMax: 100, dropChance: 0.05, zona: "abismo"  },
 ];
 
 function getAfkZona(nivel) {
@@ -5145,7 +4997,7 @@ const afkCommand = {
 
       const ahora = Date.now();
       const minutos = (ahora - p.afk.inicio) / 60000;
-      const AFK_MAX_HORAS = 5; // máximo real de recolección
+      const AFK_MAX_HORAS = 5;
       const minutosReal = Math.min(Math.max(0, minutos), AFK_MAX_HORAS * 60);
 
       // Calcular recompensas
@@ -5246,7 +5098,7 @@ const afkCommand = {
       `│ 🎒 Drops: posibles cada minuto\n` +
       `╰──────────────────────⬣\n\n` +
       `🛡️ _No puedes ser atacado mientras estás AFK._\n` +
-      `⏱️ _Máximo *5 horas* de recolección. Cooldown: 5h tras volver._\n` +
+      `⏱️ _Máximo *8 horas* de recolección. Cooldown: 5h tras volver._\n` +
       `_Usa_ \`!rpgafk off\` _para volver y reclamar tus recompensas._`;
 
     try {
@@ -8947,950 +8799,5 @@ if (_origPerfilIdx !== -1) {
     };
 
     return _origPerfilExec({ ...ctx, reply: patchedReply });
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════
-//   !exparmadura — Dungeon de Armaduras (multijugador, 3 etapas)
-// ═══════════════════════════════════════════════════════════════
-
-const EXPARMADURA_SALAS = new Map(); // groupJid -> sala
-
-const EA_ENEMIGOS = [
-  { nombre: "Golem de Piedra",    emoji: "🪨", hp: 380, atk: 38, def: 22 },
-  { nombre: "Guardián de Hierro", emoji: "⚙️", hp: 420, atk: 42, def: 28 },
-  { nombre: "Centinela Arcano",   emoji: "🔮", hp: 460, atk: 48, def: 30 },
-];
-
-const EA_BOSS = {
-  nombre: "Armiger Oscuro", emoji: "🛡️👹", hp: 900, atk: 65, def: 40,
-  desc: "Guardián final de la cripta. Sus armaduras absorben el daño.",
-};
-
-// Pool de recompensas por tier
-const EA_RECOMPENSAS = {
-  ssr:        { prob: 0.05,  label: "🌟 [SSR]" },
-  legendario: { prob: 0.10,  label: "🟠 [Legendario]" },
-  epico:      { prob: 0.20,  label: "🟣 [Épico]" },
-  raro:       { prob: 0.35,  label: "🔵 [Raro]" },
-  comun:      { prob: 1.00,  label: "⚪ [Común]" },
-};
-
-const EA_ARMADURAS_POOL = {
-  ssr:        ["peto_caballero_oscuro"],                            // BANNER_ARMADURA_SSR ids
-  legendario: ["armadura_dragon"],
-  epico:      ["armadura_runa", "armadura_acero", "manto_sombra"],
-  raro:       ["armadura_hierro", "cota_malla"],
-  comun:      ["armadura_hierro"],
-};
-
-function ea_rollArmadura(player) {
-  const roll = Math.random();
-  let tier;
-  if      (roll < EA_RECOMPENSAS.ssr.prob)        tier = "ssr";
-  else if (roll < EA_RECOMPENSAS.legendario.prob)  tier = "legendario";
-  else if (roll < EA_RECOMPENSAS.epico.prob)       tier = "epico";
-  else if (roll < EA_RECOMPENSAS.raro.prob)        tier = "raro";
-  else                                              tier = "comun";
-
-  const pool = EA_ARMADURAS_POOL[tier];
-  const id   = pool[Math.floor(Math.random() * pool.length)];
-  return { tier, id };
-}
-
-function ea_darArmadura(player, id, tier) {
-  if (tier === "ssr") {
-    // Es SSR del banner — va a _ssrItems
-    if (!player._ssrItems) player._ssrItems = {};
-    const ssrKey = "ssr_armadura_banner_" + id;
-    player._ssrItems[ssrKey] = { ...BANNER_ARMADURA_SSR[id] };
-    return ssrKey;
-  } else {
-    // Va al inventario normal
-    if (!player.inventario) player.inventario = {};
-    player.inventario[id] = (player.inventario[id] || 0) + 1;
-    return id;
-  }
-}
-
-function ea_calcDmg(atacante, defensorDef) {
-  const atk    = (getTotalAtk ? getTotalAtk(atacante) : (atacante.atk || 50)) + Math.floor(Math.random() * 15);
-  const dmg    = Math.max(1, atk - defensorDef + Math.floor(Math.random() * 10));
-  const esCrit = Math.random() * 100 < (atacante.crit || 5);
-  return { dmg: esCrit ? Math.floor(dmg * 1.5) : dmg, esCrit };
-}
-
-function ea_habilidad(player) {
-  const clase = CLASES[player.clase];
-  const hab   = clase ? Object.values(HABILIDADES || {}).find(h => h.clase === player.clase) : null;
-  const mult  = hab ? (hab.multiplicador || 1.5) : 1.3;
-  const atk   = (getTotalAtk ? getTotalAtk(player) : (player.atk || 50));
-  return { dmg: Math.floor(atk * mult), nombre: hab?.nombre || "Habilidad" };
-}
-
-// Importar BANNER_ARMADURA_SSR si no está disponible globalmente en este scope
-import { BANNER_ARMADURA_SSR as _EA_BANNER_ARMADURA_SSR, getItemsDeClase, saveDB } from "../lib/rpg-database.js";
-const BANNER_ARMADURA_SSR = _EA_BANNER_ARMADURA_SSR;
-
-const expArmaduraCommands = [
-  {
-    name: "exparmadura",
-    alias: ["exploarmadura", "dungeonarmadura"],
-    description: "Dungeon de armaduras (hasta 3 jugadores, 3 etapas, boss final)",
-    category: "RPG ⚔️",
-    groupOnly: true,
-    execute: async (ctx) => {
-      const { reply, sender, from, sock, msg, args, isGroup, mentioned } = ctx;
-      const hoy = new Date().toDateString();
-
-      if (!isGroup) return reply("⚔️ Este modo solo funciona en grupos.");
-
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG. Usa `!rpgcrear`.");
-
-      const sub = (args[0] || "").toLowerCase();
-
-      // ── INICIAR / INVITAR ─────────────────────────────────────
-      if (!sub || mentioned.length) {
-        // Verificar intentos diarios
-        if (!p._eaDungeon) p._eaDungeon = { dia: "", intentos: 0 };
-        if (p._eaDungeon.dia !== hoy) { p._eaDungeon.dia = hoy; p._eaDungeon.intentos = 0; }
-        if (p._eaDungeon.intentos >= 3)
-          return reply("⏳ Ya usaste tus *3 intentos diarios* de la Dungeon de Armaduras.\nVuelve mañana.");
-
-        if (EXPARMADURA_SALAS.has(from))
-          return reply("⚠️ Ya hay una sala activa en este grupo. Usa `!exparmadura aceptar` para unirte.");
-
-        // Crear sala
-        const sala = {
-          lider: sender,
-          jugadores: [sender],
-          invitados: mentioned.filter(j => j !== sender),
-          etapa: 0,       // 0 = sala abierta, 1-3 = etapas
-          fase: "espera", // espera | combate | fin
-          enemigo: null,
-          turno: {},      // jid -> "atacar"|"habilidad"|null
-          creada: Date.now(),
-        };
-        EXPARMADURA_SALAS.set(from, sala);
-
-        let texto = `🛡️ *DUNGEON DE ARMADURAS* 🛡️\n━━━━━━━━━━━━━━\n👑 Líder: *${p.nombre}*\n👥 Jugadores: 1/3\n\n`;
-        if (sala.invitados.length) {
-          texto += `📨 Invitados:\n`;
-          for (const jid of sala.invitados) {
-            const ip = db.players[jid];
-            texto += `  • ${ip?.nombre || jid.split("@")[0]}\n`;
-          }
-          texto += `\n✅ Usa \`!exparmadura aceptar\` para unirte.\n`;
-        }
-        texto += `\n🗡️ Cuando estés listo: \`!exparmadura avanzar\`\n_Sala expira en 3 minutos._`;
-
-        // Auto-expirar sala tras 3 min
-        setTimeout(() => {
-          if (EXPARMADURA_SALAS.has(from)) {
-            const s = EXPARMADURA_SALAS.get(from);
-            if (s.fase === "espera") {
-              EXPARMADURA_SALAS.delete(from);
-              sock.sendMessage(from, { text: "⏰ La sala de *Dungeon de Armaduras* expiró por inactividad." });
-            }
-          }
-        }, 180_000);
-
-        return reply(texto);
-      }
-
-      // ── ACEPTAR INVITACIÓN ────────────────────────────────────
-      if (sub === "aceptar") {
-        const sala = EXPARMADURA_SALAS.get(from);
-        if (!sala) return reply("❌ No hay sala activa. Usa `!exparmadura` para crear una.");
-        if (sala.fase !== "espera") return reply("❌ La dungeon ya comenzó.");
-        if (sala.jugadores.includes(sender)) return reply("⚠️ Ya estás en la sala.");
-        if (sala.jugadores.length >= 3) return reply("❌ La sala está llena (3/3).");
-
-        if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-
-        // Verificar intentos
-        if (!p._eaDungeon) p._eaDungeon = { dia: "", intentos: 0 };
-        if (p._eaDungeon.dia !== hoy) { p._eaDungeon.dia = hoy; p._eaDungeon.intentos = 0; }
-        if (p._eaDungeon.intentos >= 3)
-          return reply(`⏳ *${p.nombre}* ya usó sus 3 intentos diarios.`);
-
-        sala.jugadores.push(sender);
-        const nombres = sala.jugadores.map(j => db.players[j]?.nombre || j.split("@")[0]).join(", ");
-        return reply(`✅ *${p.nombre}* se unió a la sala.\n👥 Jugadores (${sala.jugadores.length}/3): ${nombres}\n\n🗡️ Líder, usa \`!exparmadura avanzar\` cuando estén listos.`);
-      }
-
-      // ── AVANZAR (solo líder) ──────────────────────────────────
-      if (sub === "avanzar") {
-        const sala = EXPARMADURA_SALAS.get(from);
-        if (!sala) return reply("❌ No hay sala activa.");
-        if (sala.lider !== sender) return reply("❌ Solo el líder puede avanzar.");
-
-        if (sala.fase === "combate")
-          return reply("⚔️ Hay un combate en curso. Todos deben usar `!exparmadura atacar` o `!exparmadura habilidad`.");
-
-        sala.etapa++;
-        if (sala.etapa > 3) {
-          EXPARMADURA_SALAS.delete(from);
-          return reply("✅ Ya completaron todas las etapas.");
-        }
-
-        // Configurar enemigo
-        const esDef = sala.etapa === 3;
-        const base  = esDef ? { ...EA_BOSS } : { ...EA_ENEMIGOS[sala.etapa - 1] };
-        // Escalar HP según número de jugadores
-        base.hpActual = Math.floor(base.hp * (1 + (sala.jugadores.length - 1) * 0.4));
-        sala.enemigo  = base;
-        sala.fase     = "combate";
-        sala.turno    = {};
-
-        const nombres = sala.jugadores.map(j => db.players[j]?.nombre || j.split("@")[0]).join(", ");
-        let txt = `⚔️ *ETAPA ${sala.etapa}/3*${esDef ? " — ¡BOSS!" : ""}\n━━━━━━━━━━━━━━\n`;
-        txt += `${base.emoji} *${base.nombre}*\n`;
-        txt += `❤️ HP: ${base.hpActual} | ⚔️ ATK: ${base.atk} | 🛡️ DEF: ${base.def}\n\n`;
-        if (esDef) txt += `_"${base.desc}"_\n\n`;
-        txt += `👥 Partido: ${nombres}\n\n`;
-        txt += `Todos usen:\n• \`!exparmadura atacar\` — Ataque normal\n• \`!exparmadura habilidad\` — Habilidad de clase (más daño)`;
-        return sock.sendMessage(from, { text: txt }, { quoted: msg });
-      }
-
-      // ── ATACAR / HABILIDAD ────────────────────────────────────
-      if (sub === "atacar" || sub === "habilidad") {
-        const sala = EXPARMADURA_SALAS.get(from);
-        if (!sala) return reply("❌ No hay sala activa.");
-        if (sala.fase !== "combate") return reply("⚠️ No hay combate en curso.");
-        if (!sala.jugadores.includes(sender)) return reply("❌ No estás en esta sala.");
-        if (sala.turno[sender]) return reply("⏳ Ya elegiste tu acción. Esperando a los demás...");
-
-        sala.turno[sender] = sub;
-
-        const pendientes = sala.jugadores.filter(j => !sala.turno[j]);
-        if (pendientes.length > 0) {
-          const nomPend = pendientes.map(j => db.players[j]?.nombre || j.split("@")[0]).join(", ");
-          return reply(`✅ Acción registrada. Esperando: *${nomPend}*`);
-        }
-
-        // ── RESOLVER TURNO (todos actuaron) ──────────────────────
-        const enemigo = sala.enemigo;
-        let resumen   = `⚔️ *RESULTADO DEL TURNO — Etapa ${sala.etapa}/3*\n━━━━━━━━━━━━━━\n`;
-
-        let dmgTotal = 0;
-        for (const jid of sala.jugadores) {
-          const jp     = db.players[jid];
-          const accion = sala.turno[jid];
-          let dmg, esCrit, nombreAtk;
-
-          if (accion === "habilidad") {
-            const res = ea_habilidad(jp);
-            dmg = Math.max(1, res.dmg - Math.floor(enemigo.def * 0.5));
-            esCrit = false;
-            nombreAtk = res.nombre;
-          } else {
-            const res = ea_calcDmg(jp, enemigo.def);
-            dmg    = res.dmg;
-            esCrit = res.esCrit;
-            nombreAtk = "Ataque";
-          }
-          dmgTotal += dmg;
-          resumen  += `• *${jp.nombre}* [${nombreAtk}]: ${dmg} dmg${esCrit ? " 💥CRIT" : ""}\n`;
-        }
-
-        enemigo.hpActual = Math.max(0, enemigo.hpActual - dmgTotal);
-        resumen += `\n🗡️ Daño total: *${dmgTotal}*\n`;
-        resumen += `${enemigo.emoji} HP restante: *${enemigo.hpActual}*\n`;
-
-        // Contraataque del enemigo
-        let dmgEnemy = Math.max(1, enemigo.atk - Math.floor(Math.random() * 10));
-        resumen += `\n🔴 *${enemigo.nombre}* contraataca: ${dmgEnemy} dmg (dividido)\n`;
-
-        // ── VICTORIA ─────────────────────────────────────────────
-        if (enemigo.hpActual <= 0) {
-          resumen += `\n✅ *¡${enemigo.nombre} derrotado!*\n━━━━━━━━━━━━━━\n`;
-
-          if (sala.etapa === 3) {
-            // BOSS caído — dar recompensas
-            resumen += `🎉 *¡DUNGEON COMPLETADA!*\n\n🎁 *Recompensas:*\n`;
-            for (const jid of sala.jugadores) {
-              const jp = db.players[jid];
-              const { tier, id } = ea_rollArmadura(jp);
-              const itemKey = ea_darArmadura(jp, id, tier);
-              const label   = EA_RECOMPENSAS[tier].label;
-              const itemData = tier === "ssr"
-                ? BANNER_ARMADURA_SSR[id]
-                : TIENDA[id];
-              const nombre  = itemData?.nombre || id;
-
-              // Descontar intento diario
-              if (!jp._eaDungeon) jp._eaDungeon = { dia: hoy, intentos: 0 };
-              if (jp._eaDungeon.dia !== hoy) { jp._eaDungeon.dia = hoy; jp._eaDungeon.intentos = 0; }
-              jp._eaDungeon.intentos++;
-
-              savePlayer(jp);
-              resumen += `• *${jp.nombre}*: ${label} ${itemData?.emoji || "🛡️"} *${nombre}*\n`;
-            }
-            EXPARMADURA_SALAS.delete(from);
-            resumen += `\n_Intentos restantes hoy: ver con_ \`!exparmadura intentos\``;
-          } else {
-            resumen += `\n▶️ Usa \`!exparmadura avanzar\` para continuar a la etapa ${sala.etapa + 1}.`;
-            sala.fase  = "espera";
-            sala.turno = {};
-          }
-
-        } else {
-          // Continuar combate
-          sala.turno = {};
-          resumen += `\n▶️ Todos usen \`!exparmadura atacar\` o \`!exparmadura habilidad\` de nuevo.`;
-        }
-
-        return sock.sendMessage(from, { text: resumen }, { quoted: msg });
-      }
-
-      // ── INTENTOS ──────────────────────────────────────────────
-      if (sub === "intentos") {
-        if (!p._eaDungeon) p._eaDungeon = { dia: "", intentos: 0 };
-        if (p._eaDungeon.dia !== hoy) { p._eaDungeon.dia = hoy; p._eaDungeon.intentos = 0; }
-        const restantes = 3 - p._eaDungeon.intentos;
-        return reply(`🛡️ *Dungeon de Armaduras*\n⏳ Intentos restantes hoy: *${restantes}/3*`);
-      }
-
-      // ── SALIR ─────────────────────────────────────────────────
-      if (sub === "salir" || sub === "cancelar") {
-        const sala = EXPARMADURA_SALAS.get(from);
-        if (!sala) return reply("❌ No hay sala activa.");
-        if (sala.lider !== sender) return reply("❌ Solo el líder puede cancelar la sala.");
-        EXPARMADURA_SALAS.delete(from);
-        return reply("🚪 Sala de Dungeon de Armaduras cancelada.");
-      }
-
-      // ── AYUDA ─────────────────────────────────────────────────
-      return reply(
-        `🛡️ *DUNGEON DE ARMADURAS*\n━━━━━━━━━━━━━━\n` +
-        `• \`!exparmadura\` — Crear sala\n` +
-        `• \`!exparmadura @usuario\` — Invitar jugadores\n` +
-        `• \`!exparmadura aceptar\` — Unirse a sala\n` +
-        `• \`!exparmadura avanzar\` — Avanzar etapa (líder)\n` +
-        `• \`!exparmadura atacar\` — Atacar en combate\n` +
-        `• \`!exparmadura habilidad\` — Usar habilidad de clase\n` +
-        `• \`!exparmadura intentos\` — Ver intentos restantes\n` +
-        `• \`!exparmadura salir\` — Cancelar sala (líder)\n\n` +
-        `📌 3 intentos diarios | 3 etapas | hasta 3 jugadores\n` +
-        `🎁 Boss final dropea armaduras hasta SSR`
-      );
-    },
-  },
-];
-
-rpgCommands.push(...expArmaduraCommands);
-
-// ═══════════════════════════════════════════════════════════════
-//   SISTEMA DE JEFES MUNDIALES
-//   !jefemundial | !jefemundialatacar [nombre]
-// ═══════════════════════════════════════════════════════════════
-
-const JM_RESPAWN_MS = 72 * 60 * 60 * 1000; // 72 horas
-const JM_CD_ATAQUE  = 5 * 60 * 1000;        // 5 min cooldown por jugador por jefe
-
-const JEFES_MUNDIALES_DEF = [
-  {
-    id: "asharot",
-    nombre: "Asharot el Caído",
-    emoji: "👹",
-    desc: "Señor de la oscuridad eterna. Su sola presencia corrompe el mundo.",
-    hpMax: 500_000,
-    atk: 800,
-    recompensa: { oro: 5000, gemas: 150, item: "pocion_superior", cantidad: 3 },
-  },
-  {
-    id: "leviatán",
-    nombre: "Leviatán Abismal",
-    emoji: "🌊",
-    desc: "Serpiente primordial que duerme en las profundidades del mundo.",
-    hpMax: 420_000,
-    atk: 700,
-    recompensa: { oro: 4000, gemas: 120, item: "pocion_superior", cantidad: 2 },
-  },
-  {
-    id: "moloch",
-    nombre: "Moloch el Devorador",
-    emoji: "🔥",
-    desc: "Dios del fuego y la destrucción. Consume todo a su paso.",
-    hpMax: 380_000,
-    atk: 680,
-    recompensa: { oro: 3500, gemas: 100, item: "pocion_mayor", cantidad: 3 },
-  },
-  {
-    id: "valkiria",
-    nombre: "Valkiria Maldita",
-    emoji: "⚡",
-    desc: "Guerrera celestial corrompida. Fue enviada a juzgar y se quedó a reinar.",
-    hpMax: 350_000,
-    atk: 650,
-    recompensa: { oro: 3000, gemas: 90, item: "pocion_mayor", cantidad: 2 },
-  },
-  {
-    id: "kronos",
-    nombre: "Kronos el Eterno",
-    emoji: "⌛",
-    desc: "Señor del tiempo. Cada segundo que pasa lo hace más poderoso.",
-    hpMax: 300_000,
-    atk: 600,
-    recompensa: { oro: 2500, gemas: 80, item: "pocion_vida2", cantidad: 2 },
-  },
-];
-
-// Estado en memoria — se persiste en db.jefes_mundiales
-function getJMState() {
-  if (!db.jefes_mundiales) {
-    db.jefes_mundiales = {};
-    for (const def of JEFES_MUNDIALES_DEF) {
-      db.jefes_mundiales[def.id] = {
-        hpActual: def.hpMax,
-        vivo: true,
-        ultimoRespawn: Date.now(),
-        proximoRespawn: null,
-        participantes: {}, // jid -> { dmgTotal, ultimoAtaque }
-        golpeFinal: null,
-      };
-    }
-    saveDB();
-  }
-  return db.jefes_mundiales;
-}
-
-// Verificar respawn de todos los jefes
-async function jm_checkRespawn() {
-  const state = getJMState();
-  const ahora = Date.now();
-  let huboRespawn = false;
-
-  for (const def of JEFES_MUNDIALES_DEF) {
-    const s = state[def.id];
-    if (!s.vivo && s.proximoRespawn && ahora >= s.proximoRespawn) {
-      s.hpActual       = def.hpMax;
-      s.vivo           = true;
-      s.ultimoRespawn  = ahora;
-      s.proximoRespawn = null;
-      s.participantes  = {};
-      s.golpeFinal     = null;
-      huboRespawn      = true;
-
-      // Anunciar a todos los grupos
-      const txt =
-        `🌍 *¡JEFE MUNDIAL APARECIDO!*\n` +
-        `━━━━━━━━━━━━━━\n` +
-        `${def.emoji} *${def.nombre}*\n` +
-        `_"${def.desc}"_\n\n` +
-        `❤️ HP: *${def.hpMax.toLocaleString()}*\n\n` +
-        `⚔️ Usa \`!jefemundialatacar ${def.id}\` para atacarlo.\n` +
-        `👑 ¡Quien dé el golpe final recibe el título *Cazador Mundial*!`;
-      broadcastGrupos(txt).catch(() => {});
-    }
-  }
-
-  if (huboRespawn) saveDB();
-}
-
-// Iniciar el loop de respawn (cada 5 min revisa)
-setInterval(jm_checkRespawn, 5 * 60 * 1000);
-
-const jefeMundialCommands = [
-  // ── !jefemundial — Ver todos los jefes ──────────────────────
-  {
-    name: "jefemundial",
-    alias: ["jefesmundiales", "bossmundial"],
-    description: "Ver el estado de todos los Jefes Mundiales",
-    category: "RPG ⚔️",
-    execute: async ({ reply }) => {
-      await jm_checkRespawn();
-      const state = getJMState();
-      const ahora = Date.now();
-      let txt = `🌍 *JEFES MUNDIALES*\n━━━━━━━━━━━━━━\n`;
-
-      for (const def of JEFES_MUNDIALES_DEF) {
-        const s = state[def.id];
-        const pct = Math.floor((s.hpActual / def.hpMax) * 100);
-        const bar = "█".repeat(Math.floor(pct / 10)) + "░".repeat(10 - Math.floor(pct / 10));
-
-        if (s.vivo) {
-          txt += `${def.emoji} *${def.nombre}*\n`;
-          txt += `  ❤️ HP: ${s.hpActual.toLocaleString()} / ${def.hpMax.toLocaleString()} (${pct}%)\n`;
-          txt += `  [${bar}]\n`;
-          txt += `  ⚔️ \`!jefemundialatacar ${def.id}\`\n\n`;
-        } else {
-          const resta = s.proximoRespawn - ahora;
-          const horas = Math.floor(resta / 3600000);
-          const mins  = Math.floor((resta % 3600000) / 60000);
-          txt += `💀 *${def.nombre}* — Derrotado\n`;
-          txt += `  ⏳ Reaparece en: *${horas}h ${mins}m*\n\n`;
-        }
-      }
-      return reply(txt);
-    },
-  },
-
-  // ── !jefemundialatacar [id] ──────────────────────────────────
-  {
-    name: "jefemundialatacar",
-    alias: ["atacarjefemundial", "jmatacar"],
-    description: "Atacar un Jefe Mundial. Uso: !jefemundialatacar [id]",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender, args, sock, from, msg }) => {
-      await jm_checkRespawn();
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-
-      const idBuscar = (args[0] || "").toLowerCase().trim();
-      if (!idBuscar) {
-        const lista = JEFES_MUNDIALES_DEF.map(d => `• \`${d.id}\` ${d.emoji} ${d.nombre}`).join("\n");
-        return reply(`⚔️ Especifica un jefe:\n${lista}`);
-      }
-
-      const def = JEFES_MUNDIALES_DEF.find(d =>
-        d.id === idBuscar || d.nombre.toLowerCase().includes(idBuscar)
-      );
-      if (!def) return reply(`❌ Jefe no encontrado. Usa \`!jefemundial\` para ver la lista.`);
-
-      const state = getJMState();
-      const s     = state[def.id];
-
-      if (!s.vivo) {
-        const resta = s.proximoRespawn - Date.now();
-        const horas = Math.floor(resta / 3600000);
-        const mins  = Math.floor((resta % 3600000) / 60000);
-        return reply(`💀 *${def.nombre}* ya fue derrotado.\n⏳ Reaparece en: *${horas}h ${mins}m*`);
-      }
-
-      // Cooldown por jugador
-      const part   = s.participantes[sender] || { dmgTotal: 0, ultimoAtaque: 0 };
-      const ahora  = Date.now();
-      const cdRest = part.ultimoAtaque + JM_CD_ATAQUE - ahora;
-      if (cdRest > 0) {
-        const segs = Math.ceil(cdRest / 1000);
-        return reply(`⏳ Puedes volver a atacar en *${segs}s*.`);
-      }
-
-      // Calcular daño
-      const atk    = getTotalAtk(p) + Math.floor(Math.random() * 50);
-      const esCrit = Math.random() * 100 < (p.crit || 5);
-      let dmg      = Math.max(100, atk * 8 + Math.floor(Math.random() * 500));
-      if (esCrit) dmg = Math.floor(dmg * 1.5);
-      dmg = Math.min(dmg, s.hpActual); // no pasar de la vida actual
-
-      // Aplicar daño global
-      s.hpActual -= dmg;
-      part.dmgTotal    = (part.dmgTotal || 0) + dmg;
-      part.ultimoAtaque = ahora;
-      s.participantes[sender] = part;
-
-      const pct = Math.max(0, Math.floor((s.hpActual / def.hpMax) * 100));
-      const bar = "█".repeat(Math.floor(pct / 10)) + "░".repeat(10 - Math.floor(pct / 10));
-
-      // Anunciar ataque a todos los grupos
-      const anuncio =
-        `⚔️ *${p.nombre}* ataca a ${def.emoji} *${def.nombre}*!\n` +
-        `💥 Daño: *${dmg.toLocaleString()}*${esCrit ? " 💥CRIT" : ""}\n` +
-        `❤️ HP restante: *${s.hpActual.toLocaleString()}* [${bar}]`;
-      broadcastGrupos(anuncio).catch(() => {});
-
-      // ── GOLPE FINAL ───────────────────────────────────────────
-      if (s.hpActual <= 0) {
-        s.vivo           = false;
-        s.hpActual       = 0;
-        s.golpeFinal     = sender;
-        s.proximoRespawn = ahora + JM_RESPAWN_MS;
-
-        // Dar recompensa y título al golpe final
-        p._cazadorMundial = true;
-        p.oro   = (p.oro   || 0) + def.recompensa.oro;
-        p.gemas = (p.gemas || 0) + def.recompensa.gemas;
-        if (!p.inventario) p.inventario = {};
-        p.inventario[def.recompensa.item] = (p.inventario[def.recompensa.item] || 0) + def.recompensa.cantidad;
-        savePlayer(p);
-        saveDB();
-
-        const victoria =
-          `🏆 *¡JEFE MUNDIAL DERROTADO!*\n` +
-          `━━━━━━━━━━━━━━\n` +
-          `${def.emoji} *${def.nombre}* ha caído!\n\n` +
-          `👑 Golpe final: *${p.nombre}*\n` +
-          `🎖️ Título desbloqueado: *🌍 Cazador Mundial*\n\n` +
-          `🎁 Recompensas:\n` +
-          `  💰 ${def.recompensa.oro.toLocaleString()} oro\n` +
-          `  💎 ${def.recompensa.gemas} gemas\n` +
-          `  🧪 ${def.recompensa.cantidad}x ${def.recompensa.item}\n\n` +
-          `⏳ Reaparecerá en *72 horas*.`;
-        broadcastGrupos(victoria).catch(() => {});
-        return; // ya se anunció globalmente
-      }
-
-      saveDB();
-
-      return sock.sendMessage(from, {
-        text:
-          `⚔️ Atacaste a ${def.emoji} *${def.nombre}*\n` +
-          `💥 Daño: *${dmg.toLocaleString()}*${esCrit ? " 💥CRIT" : ""}\n` +
-          `❤️ HP: *${s.hpActual.toLocaleString()}* / ${def.hpMax.toLocaleString()} (${pct}%)\n` +
-          `[${bar}]\n\n` +
-          `⏳ Próximo ataque en *5 minutos*.`,
-      }, { quoted: msg });
-    },
-  },
-];
-
-rpgCommands.push(...jefeMundialCommands);
-
-
-// ═══════════════════════════════════════════════════════════════
-//   TIENDAS POR CLASE — Rework completo
-// ═══════════════════════════════════════════════════════════════
-
-const tiendaClaseCommands = [
-
-  // ── !rpgtienda — Submenú principal ────────────────────────
-  {
-    name: "rpgtienda",
-    alias: ["tiendarpg"],
-    description: "Ver el submenú de tiendas del RPG",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      const clase = p?.clase || null;
-      let txt =
-        "🛒 *TIENDA RPG*\n" +
-        "━━━━━━━━━━━━━━\n" +
-        "Selecciona una tienda:\n\n" +
-        "⚔️ *TIENDAS DE CLASE* (ítems exclusivos)\n";
-
-      const clases = [
-        ["guerrero",   "⚔️",  "!tiendaguerrero"],
-        ["mago",       "🧙",  "!tiendamago"],
-        ["arquero",    "🏹",  "!tiendaarquero"],
-        ["asesino",    "🗡️", "!tiendaasesino"],
-        ["sacerdote",  "✨",  "!tiendasacerdote"],
-        ["paladin",    "🛡️", "!tiendapaladin"],
-        ["nigromante", "💀",  "!tiendanigromante"],
-        ["hombrelobo", "🐺",  "!tiendahombrelobo"],
-        ["nomuerto",   "🧟",  "!tiendanomuerto"],
-      ];
-
-      for (const [c, emoji, cmd] of clases) {
-        const marca = clase === c ? " ◀ *TU CLASE*" : "";
-        txt += `  ${emoji} ${cmd}${marca}\n`;
-      }
-
-      txt +=
-        "\n🧪 *TIENDA GENERAL* (pociones, accesorios, orbes)\n" +
-        "  !rpgtiendageneral\n\n" +
-        "🏅 *TIENDA DEL CLAN* (medallas)\n" +
-        "  !tiendaclan";
-
-      return reply(txt);
-    },
-  },
-
-  // ── !rpgtiendageneral — Tienda original (sin armas/armaduras de clase) ──
-  {
-    name: "rpgtiendageneral",
-    alias: ["tiendageneral"],
-    description: "Tienda general: pociones, accesorios, orbes",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      const tipos = ["pocion", "pocion_buff", "accesorio", "orbe_stat", "orbe_equipo"];
-      const emojis = { pocion: "🧪", pocion_buff: "✨", accesorio: "📿", orbe_stat: "🔵", orbe_equipo: "🟡" };
-      let txt = `🛒 *TIENDA GENERAL*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      for (const tipo of tipos) {
-        const items = Object.entries(TIENDA).filter(([, v]) => v.tipo === tipo);
-        if (!items.length) continue;
-        txt += `${emojis[tipo] || "🔹"} *${tipo.toUpperCase().replace("_", " ")}*\n`;
-        for (const [id, item] of items) {
-          txt += `  • \`${id}\` ${item.emoji} ${item.nombre} — ${item.precio}💰\n`;
-        }
-        txt += "\n";
-      }
-      txt += "💡 Compra: `!rpgcomprar [id]` | Pociones y orbes: `!rpgcomprar [id] 5` o `!rpgcomprar [id] 10`";
-      return reply(txt);
-    },
-  },
-
-  {
-    name: "tiendaguerrero",
-    alias: ["tienda_guerrero"],
-    description: "Tienda exclusiva de Guerrero",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "guerrero") return reply(`❌ Esta tienda es exclusiva para *Guerrero* ⚔️.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("guerrero");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `⚔️ *TIENDA GUERRERO*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendamago",
-    alias: ["tienda_mago"],
-    description: "Tienda exclusiva de Mago",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "mago") return reply(`❌ Esta tienda es exclusiva para *Mago* 🧙.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("mago");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `🧙 *TIENDA MAGO*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendaarquero",
-    alias: ["tienda_arquero"],
-    description: "Tienda exclusiva de Arquero",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "arquero") return reply(`❌ Esta tienda es exclusiva para *Arquero* 🏹.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("arquero");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `🏹 *TIENDA ARQUERO*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendaasesino",
-    alias: ["tienda_asesino"],
-    description: "Tienda exclusiva de Asesino",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "asesino") return reply(`❌ Esta tienda es exclusiva para *Asesino* 🗡️.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("asesino");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `🗡️ *TIENDA ASESINO*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendasacerdote",
-    alias: ["tienda_sacerdote"],
-    description: "Tienda exclusiva de Sacerdote",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "sacerdote") return reply(`❌ Esta tienda es exclusiva para *Sacerdote* ✨.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("sacerdote");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `✨ *TIENDA SACERDOTE*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendapaladin",
-    alias: ["tienda_paladin"],
-    description: "Tienda exclusiva de Paladín",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "paladin") return reply(`❌ Esta tienda es exclusiva para *Paladín* 🛡️.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("paladin");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `🛡️ *TIENDA PALADÍN*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendanigromante",
-    alias: ["tienda_nigromante"],
-    description: "Tienda exclusiva de Nigromante",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "nigromante") return reply(`❌ Esta tienda es exclusiva para *Nigromante* 💀.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("nigromante");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `💀 *TIENDA NIGROMANTE*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendahombrelobo",
-    alias: ["tienda_hombrelobo"],
-    description: "Tienda exclusiva de Hombre Lobo",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "hombrelobo") return reply(`❌ Esta tienda es exclusiva para *Hombre Lobo* 🐺.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("hombrelobo");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `🐺 *TIENDA HOMBRE LOBO*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-  {
-    name: "tiendanomuerto",
-    alias: ["tienda_nomuerto"],
-    description: "Tienda exclusiva de No-Muerto",
-    category: "RPG ⚔️",
-    execute: async ({ reply, sender }) => {
-      const p = db.players[sender];
-      if (!p || !p.clase) return reply("❌ No tienes personaje RPG.");
-      if (p.clase !== "nomuerto") return reply(`❌ Esta tienda es exclusiva para *No-Muerto* 🧟.\nTu clase es *${p.clase}*. Usa \`!rpgtienda\` para ver tu tienda.`);
-      const items = getItemsDeClase("nomuerto");
-      if (!items.length) return reply("❌ Sin ítems disponibles para tu clase.");
-      const calidadEmoji = { comun: "⚪", raro: "🔵", epico: "🟣", legendario: "🟠", mitico: "🔴" };
-      let txt = `🧟 *TIENDA NO-MUERTO*\n━━━━━━━━━━━━━━\n💰 Oro: *${p.oro}*\n\n`;
-      let tipoActual = "";
-      for (const [id, item] of items) {
-        if (item.tipo !== tipoActual) {
-          tipoActual = item.tipo;
-          txt += `\n⚔️ *${tipoActual.toUpperCase()}S*\n`;
-        }
-        const cal = calidadEmoji[item.calidad] || "⚪";
-        const puedes = p.nivel >= item.nivelReq;
-        txt += `  ${cal} \`${id}\` ${item.emoji} *${item.nombre}*\n`;
-        txt += `     ATK:${item.atk} DEF:${item.def} | ${item.precio}💰 | Nv.${item.nivelReq}${puedes ? "" : " 🔒"}\n`;
-      }
-      txt += "\n💡 Compra: `!rpgcomprar [id]`";
-      return reply(txt);
-    },
-  },
-];
-
-rpgCommands.push(...tiendaClaseCommands);
-
-// ── Patch: validar clase al equipar ──────────────────────────
-const _rpgEquiparIdx = rpgCommands.findIndex(c => c.name === "rpgequipar");
-if (_rpgEquiparIdx !== -1) {
-  const _origEquipar = rpgCommands[_rpgEquiparIdx].execute;
-  rpgCommands[_rpgEquiparIdx].execute = async (ctx) => {
-    const { reply, sender, args } = ctx;
-    const itemId = args[0]?.toLowerCase();
-    if (itemId) {
-      const p = db.players[sender];
-      const itemClase = TIENDA_CLASE[itemId];
-      if (itemClase && p) {
-        if (itemClase.clase && itemClase.clase !== p.clase) {
-          const claseNombre = itemClase.clase.charAt(0).toUpperCase() + itemClase.clase.slice(1);
-          return reply(
-            `❌ *${itemClase.emoji} ${itemClase.nombre}* es exclusivo para la clase *${claseNombre}*\n` +
-            `Tu clase es *${p.clase}*. Solo puedes equipar ítems de tu clase o de la tienda general.\n` +
-            `Usa \`!rpgtienda\` para ver tu tienda.`
-          );
-        }
-      }
-    }
-    return _origEquipar(ctx);
   };
 }
