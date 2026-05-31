@@ -3,40 +3,35 @@
 //   Descargar canciones como AUDIO (mp3)
 // ═══════════════════════════════════════════
 
-import { execSync, exec } from "child_process";
-import { writeFile, unlink, access } from "fs/promises";
+import { exec } from "child_process";
+import { writeFile, unlink } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
 
 const execAsync = promisify(exec);
 
-// ── Verifica e instala yt-dlp si no está ────
-function ytdlpAvailable() {
+// ── Obtiene el binario de yt-dlp ─────────────
+function getYtDlpBin() {
   try {
-    execSync("yt-dlp --version", { stdio: "pipe" });
-    return true;
+    const ytDlpExec = require("yt-dlp-exec");
+    return ytDlpExec.path || "yt-dlp";
   } catch {
-    try {
-      execSync("pip install yt-dlp --break-system-packages -q", { stdio: "pipe", timeout: 60000 });
-      execSync("yt-dlp --version", { stdio: "pipe" });
-      return true;
-    } catch {
-      try {
-        execSync("pip3 install yt-dlp --break-system-packages -q", { stdio: "pipe", timeout: 60000 });
-        execSync("yt-dlp --version", { stdio: "pipe" });
-        return true;
-      } catch {
-        return false;
-      }
-    }
+    return "yt-dlp";
   }
+}
+const YT_DLP = getYtDlpBin();
+
+function ytdlpAvailable() {
+  return true; // yt-dlp-exec incluye el binario
 }
 
 // ── Busca en YouTube y retorna URL ──────────
 async function searchYouTube(query) {
   const { stdout } = await execAsync(
-    `yt-dlp "ytsearch1:${query.replace(/"/g, "")}" --get-id --no-playlist`,
+    `"${YT_DLP}" "ytsearch1:${query.replace(/"/g, "")}" --get-id --no-playlist`,
     { timeout: 30000 }
   );
   const videoId = stdout.trim();
@@ -47,7 +42,7 @@ async function searchYouTube(query) {
 // ── Descarga audio como mp3 ─────────────────
 async function downloadAudio(url, outPath) {
   await execAsync(
-    `yt-dlp -x --audio-format mp3 --audio-quality 5 ` +
+    `"${YT_DLP}" -x --audio-format mp3 --audio-quality 5 ` +
     `--no-playlist --max-filesize 20m ` +
     `--output "${outPath}" "${url}"`,
     { timeout: 120000 }
