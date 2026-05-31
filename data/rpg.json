@@ -3139,7 +3139,7 @@
       "clase": "hombrelobo",
       "nombre": "VILCA",
       "nivel": 15,
-      "exp": 16880,
+      "exp": 27680,
       "expMax": 29192,
       "hp": 462,
       "hpMax": 462,
@@ -3147,18 +3147,18 @@
       "def": 35,
       "spd": 40,
       "crit": 40,
-      "oro": 42043,
+      "oro": 49879,
       "gemas": 1076,
       "inventario": {
         "espada_hierro": 0,
         "armadura_tela": 0,
-        "pocion_mayor": 3,
+        "pocion_mayor": 4,
         "arco_elfico": 1,
-        "espada_acero": 0,
+        "espada_acero": 1,
         "armadura_hierro": 0,
         "amuleto_fuerza": 2,
         "pocion_menor": 6,
-        "armadura_acero": 1,
+        "armadura_acero": 2,
         "hacha_acero": 0,
         "elixir_fuerza": 3,
         "arco_largo": 0,
@@ -3169,20 +3169,21 @@
         "pocion_superior": 2,
         "arco_fenix": 1,
         "colgante_epico": 1,
-        "armadura_runa": 5,
+        "armadura_runa": 7,
         "elixir": 4,
         "daga_rota": 1,
         "cota_malla": 2,
-        "espada_runa": 1,
-        "armadura_cuero": 2,
+        "espada_runa": 2,
+        "armadura_cuero": 3,
         "corona_dragon": 1,
-        "lanza_divina": 2,
+        "lanza_divina": 3,
         "armadura_titan": 1,
         "arco_madera": 3,
         "espada_madera": 1,
         "manto_celestial": 1,
         "manto_sombra": 1,
-        "orbe_dorado": 0
+        "orbe_dorado": 0,
+        "cetro_arcano": 1
       },
       "equipo": {
         "arma": "lanza_divina",
@@ -3294,7 +3295,7 @@
       "_torreAtaqueTs": 1780178418684,
       "descansandoEn": null,
       "descansandoFrom": null,
-      "afkCooldown": 1780105864602,
+      "afkCooldown": 1780186695439,
       "topArena": null,
       "buzon": [
         {
@@ -3375,10 +3376,6 @@
       "medallas": 10,
       "mejorasEquipo": {
         "arma_atk": 1
-      },
-      "afk": {
-        "inicio": 1780168660663,
-        "from": "120363426671493472@g.us"
       }
     },
     "4565751603271@lid": {
