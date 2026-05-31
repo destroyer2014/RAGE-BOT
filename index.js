@@ -24,6 +24,25 @@ import { welcomeGroups } from "./src/commands/grupo.js";
 // ── Logger silencioso (solo errores críticos) ─
 const logger = pino({ level: "silent" });
 
+// ── Auto-instalar yt-dlp si no está disponible ─
+import { execSync } from "child_process";
+try {
+  execSync("yt-dlp --version", { stdio: "ignore" });
+} catch {
+  console.log("[SETUP] Instalando yt-dlp...");
+  try {
+    execSync("pip3 install yt-dlp", { stdio: "inherit" });
+    console.log("[SETUP] yt-dlp instalado correctamente.");
+  } catch {
+    try {
+      execSync("pip install yt-dlp", { stdio: "inherit" });
+      console.log("[SETUP] yt-dlp instalado correctamente.");
+    } catch {
+      console.log("[SETUP] No se pudo instalar yt-dlp automáticamente.");
+    }
+  }
+}
+
 // ── Banner de inicio ──────────────────────────
 function showBanner() {
   console.clear();
