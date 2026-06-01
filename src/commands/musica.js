@@ -8,27 +8,17 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
 import { exec } from "child_process";
-import { createRequire } from "module";
-
 const execAsync = promisify(exec);
-const require = createRequire(import.meta.url);
 
 // ── Ruta de cookies ─────────────────────────
 const COOKIES_PATH = "/home/container/cookies.txt";
 
-// ── Obtener binario yt-dlp (desde yt-dlp-exec o sistema) ──
+// ── Binario yt-dlp (bundled en node_modules) ──
+const YT_DLP_BIN = "/home/container/node_modules/yt-dlp-exec/bin/yt-dlp";
+
+// ── Obtener binario yt-dlp ──
 function getYtDlpBin() {
-  try {
-    const pkg = require.resolve("yt-dlp-exec/src/index.js");
-    const { getBinaryPath } = require("yt-dlp-exec/src/index.js");
-    if (getBinaryPath) return getBinaryPath();
-  } catch {}
-  // Fallback: binario dentro del paquete
-  try {
-    const binPath = require.resolve("yt-dlp-exec").replace("src/index.js", "bin/yt-dlp");
-    return binPath;
-  } catch {}
-  return "yt-dlp";
+  return YT_DLP_BIN;
 }
 
 // ── Verifica si yt-dlp está disponible ──────
