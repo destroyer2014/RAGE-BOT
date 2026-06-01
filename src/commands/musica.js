@@ -1,74 +1,35 @@
 // ═══════════════════════════════════════════
 //     PRAGMATA BOT — src/commands/musica.js
-//   Descargar canciones via yt-dlp + cookies
+//   Descargar canciones via play-dl
 // ═══════════════════════════════════════════
 
-import { unlink, access, readFile } from "fs/promises";
+import { unlink, access, readFile, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { promisify } from "util";
-import { exec } from "child_process";
-const execAsync = promisify(exec);
+import playdl from "play-dl";
+import { createWriteStream } from "fs";
+import { pipeline } from "stream/promises";
 
 // ── Ruta de cookies ─────────────────────────
 const COOKIES_PATH = "/home/container/cookies.txt";
 
-// ── Binario yt-dlp (bundled en node_modules) ──
-const YT_DLP_BIN = "/home/container/node_modules/yt-dlp-exec/bin/yt-dlp";
-
-// ── Obtener binario yt-dlp ──
-function getYtDlpBin() {
-  return YT_DLP_BIN;
-}
-
-// ── Verifica si yt-dlp está disponible ──────
-async function ytdlpAvailable() {
-  try {
-    const bin = getYtDlpBin();
-    console.log("[MUSICA] bin path:", bin);
-    const { stdout } = await execAsync(`"${bin}" --version`, { timeout: 5000 });
-    console.log("[MUSICA] yt-dlp version:", stdout.trim());
-    return true;
-  } catch (e) {
-    console.log("[MUSICA] yt-dlp no disponible:", e.message);
-    return false;
-  }
-}
-
 // ── Verifica si hay cookies ──────────────────
 async function cookiesExist() {
-  try {
-    await access(COOKIES_PATH);
-    return true;
-  } catch {
-    return false;
-  }
+  try { await access(COOKIES_PATH); return true; } catch { return false; }
 }
 
-// ── Busca en YouTube y retorna URL ──────────
+// ── Busca en YouTube y retorna info ──────────
 async function searchYouTube(query) {
-  const bin = getYtDlpBin();
-  const cookieFlag = (await cookiesExist()) ? `--cookies "${COOKIES_PATH}"` : "";
-  const safe = query.replace(/"/g, "");
-  const { stdout } = await execAsync(
-    `"${bin}" ${cookieFlag} "ytsearch1:${safe}" --get-url --no-playlist`,
-    { timeout: 30000 }
-  );
-  const url = stdout.trim().split("\n")[0];
-  if (!url) throw new Error("No se encontró ningún resultado.");
-  return url;
+  const results = await playdl.search(query, { limit: 1, source: { youtube: "video" } });
+  if (!results || results.length === 0) throw new Error("No se encontró ningún resultado.");
+  return results[0];
 }
 
 // ── Descarga audio como mp3 ─────────────────
 async function downloadAudio(url, outPath) {
-  const bin = getYtDlpBin();
-  const cookieFlag = (await cookiesExist()) ? `--cookies "${COOKIES_PATH}"` : "";
-  await execAsync(
-    `"${bin}" ${cookieFlag} -x --audio-format mp3 --audio-quality 5 ` +
-    `--no-playlist --max-filesize 20m ` +
-    `--output "${outPath}" "${url}"`,
-    { timeout: 120000 }
-  );
+  const stream = await playdl.stream(url, { quality: 2 });
+  const writer = createWriteStream(outPath);
+  await pipeline(stream.stream, writer);
 }
 
 const musicCommands = [
@@ -85,42 +46,46 @@ const musicCommands = [
         );
       }
 
-      if (!await ytdlpAvailable()) {
-        return reply("❌ *yt-dlp no está disponible en el servidor.*");
-      }
-
       await react("🎵");
       await sock.sendMessage(from, { text: `🔍 Buscando: *${text}*...` }, { quoted: msg });
 
-      const tmpMp3 = join(tmpdir(), `rage_audio_${Date.now()}.mp3`);
+      const tmpFile = join(tmpdir(), `rage_audio_${Date.now()}`);
 
       try {
-        const url = text.startsWith("http") ? text : await searchYouTube(text);
-        await sock.sendMessage(from, { text: "⬇️ Descargando audio..." }, { quoted: msg });
-        await downloadAudio(url, tmpMp3);
+        let url;
+        let titulo = text;
 
-        const audioBuffer = await readFile(tmpMp3);
+        if (text.startsWith("http")) {
+          url = text;
+        } else {
+          const info = await searchYouTube(text);
+          url = info.url;
+          titulo = info.title || text;
+        }
+
+        await sock.sendMessage(from, { text: `⬇️ Descargando: *${titulo}*...` }, { quoted: msg });
+        await downloadAudio(url, tmpFile);
+
+        const audioBuffer = await readFile(tmpFile);
 
         await sock.sendMessage(
           from,
-          { audio: audioBuffer, mimetype: "audio/mpeg", ptt: false },
+          { audio: audioBuffer, mimetype: "audio/mp4", ptt: false },
           { quoted: msg }
         );
         await react("✅");
       } catch (err) {
         console.error("[PLAY]", err.message);
-        if (err.message.includes("File is larger")) {
-          await reply("❌ La canción es demasiado pesada (máx 20MB).");
-        } else if (err.message.includes("No se encontró")) {
+        if (err.message.includes("No se encontró")) {
           await reply(`❌ No encontré: *${text}*`);
-        } else if (err.message.includes("Sign in") || err.message.includes("bot")) {
-          await reply("❌ YouTube bloqueó la descarga.\n_Las cookies pueden haber expirado._");
+        } else if (err.message.includes("429") || err.message.includes("blocked")) {
+          await reply("❌ YouTube bloqueó la descarga temporalmente. Intenta más tarde.");
         } else {
           await reply("❌ No pude descargar la canción.\n_Intenta con otro nombre._");
         }
         await react("❌");
       } finally {
-        unlink(tmpMp3).catch(() => {});
+        unlink(tmpFile).catch(() => {});
       }
     },
   },
@@ -135,20 +100,16 @@ const musicCommands = [
         return reply("🔗 Pega la URL de YouTube.\nEj: *!playurl https://youtube.com/watch?v=...*");
       }
 
-      if (!await ytdlpAvailable()) {
-        return reply("❌ *yt-dlp no está disponible en el servidor.*");
-      }
-
       await react("🎵");
       await sock.sendMessage(from, { text: "⬇️ Descargando audio desde URL..." }, { quoted: msg });
-      const tmpMp3 = join(tmpdir(), `rage_url_${Date.now()}.mp3`);
+      const tmpFile = join(tmpdir(), `rage_url_${Date.now()}`);
 
       try {
-        await downloadAudio(url, tmpMp3);
-        const audioBuffer = await readFile(tmpMp3);
+        await downloadAudio(url, tmpFile);
+        const audioBuffer = await readFile(tmpFile);
         await sock.sendMessage(
           from,
-          { audio: audioBuffer, mimetype: "audio/mpeg", ptt: false },
+          { audio: audioBuffer, mimetype: "audio/mp4", ptt: false },
           { quoted: msg }
         );
         await react("✅");
@@ -157,7 +118,7 @@ const musicCommands = [
         await reply("❌ No pude descargar el audio.");
         await react("❌");
       } finally {
-        unlink(tmpMp3).catch(() => {});
+        unlink(tmpFile).catch(() => {});
       }
     },
   },
