@@ -1,53 +1,16 @@
 // ═══════════════════════════════════════════
 //     PRAGMATA BOT — src/commands/musica.js
-//   Buscar con YouTube Data API v3 + distube/ytdl-core
+//   Buscar con YouTube Data API v3 + descargar con ytjar RapidAPI
 // ═══════════════════════════════════════════
 
-import { unlink, access, readFile } from "fs/promises";
+import { unlink, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import ytdl from "@distube/ytdl-core";
 import { createWriteStream } from "fs";
-import { pipeline } from "stream/promises";
 import axios from "axios";
 
 const YT_API_KEY = "AIzaSyCKBzgma9coMHFUsXt5Wt-VLUveFTU1hgI";
-const COOKIES_PATH = "/home/container/cookies.txt";
-
-// ── Parsear cookies esenciales ───────────────
-const ESSENTIAL_COOKIES = [
-  "VISITOR_INFO1_LIVE", "YSC", "CONSENT", "LOGIN_INFO",
-  "__Secure-3PAPISID", "__Secure-3PSID", "__Secure-3PSIDCC",
-  "__Secure-3PSIDTS", "SAPISID", "SSID", "HSID", "SID",
-  "APISID", "NID", "PREF"
-];
-
-async function parseCookies() {
-  try {
-    await access(COOKIES_PATH);
-    const raw = await readFile(COOKIES_PATH, "utf-8");
-    const seen = {};
-    for (const line of raw.split("\n")) {
-      if (line.startsWith("#") || !line.trim()) continue;
-      const parts = line.split("\t");
-      if (parts.length >= 7 && ESSENTIAL_COOKIES.includes(parts[5]) && parts[0].includes("youtube")) {
-        seen[parts[5]] = { name: parts[5], value: parts[6].trim() };
-      }
-    }
-    return Object.values(seen);
-  } catch { return []; }
-}
-
-let ytdlAgent = null;
-async function getAgent() {
-  if (ytdlAgent) return ytdlAgent;
-  const cookies = await parseCookies();
-  if (cookies.length > 0) {
-    ytdlAgent = ytdl.createAgent(cookies);
-    console.log("[MUSICA] Agente con", cookies.length, "cookies");
-  }
-  return ytdlAgent;
-}
+const RAPID_API_KEY = "68493 5b1dbmsh60ff273781a78d7p1fd7bbjsn452f27ecaf24".replace(" ", "");
 
 // ── Buscar con YouTube Data API v3 ───────────
 async function searchYouTube(query) {
@@ -62,24 +25,35 @@ async function searchYouTube(query) {
   });
   const items = res.data.items;
   if (!items || items.length === 0) throw new Error("No se encontró ningún resultado.");
-  const video = items[0];
   return {
-    url: `https://www.youtube.com/watch?v=${video.id.videoId}`,
-    title: video.snippet.title,
+    videoId: items[0].id.videoId,
+    title: items[0].snippet.title,
   };
 }
 
-// ── Descargar audio ──────────────────────────
-async function downloadAudio(url, outPath) {
-  const agent = await getAgent();
-  const opts = {
-    filter: "audioonly",
-    quality: "highestaudio",
-    ...(agent ? { agent } : {}),
-  };
-  const stream = ytdl(url, opts);
+// ── Obtener URL de descarga via ytjar ────────
+async function getMp3Url(videoId) {
+  const res = await axios.get("https://youtube-mp36.p.rapidapi.com/dl", {
+    params: { id: videoId },
+    headers: {
+      "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
+      "x-rapidapi-key": RAPID_API_KEY,
+    },
+    timeout: 30000,
+  });
+  if (res.data.status !== "ok") throw new Error("No se pudo obtener el MP3: " + res.data.msg);
+  return { url: res.data.link, title: res.data.title };
+}
+
+// ── Descargar MP3 desde URL ──────────────────
+async function downloadMp3(url, outPath) {
+  const res = await axios.get(url, { responseType: "stream", timeout: 60000 });
   const writer = createWriteStream(outPath);
-  await pipeline(stream, writer);
+  await new Promise((resolve, reject) => {
+    res.data.pipe(writer);
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
 }
 
 const musicCommands = [
@@ -99,26 +73,31 @@ const musicCommands = [
       await react("🎵");
       await sock.sendMessage(from, { text: `🔍 Buscando: *${text}*...` }, { quoted: msg });
 
-      const tmpFile = join(tmpdir(), `rage_audio_${Date.now()}.mp4`);
+      const tmpFile = join(tmpdir(), `rage_audio_${Date.now()}.mp3`);
 
       try {
-        let url, titulo;
+        let videoId, titulo;
+
         if (text.startsWith("http")) {
-          url = text;
+          const match = text.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+          if (!match) throw new Error("URL de YouTube inválida.");
+          videoId = match[1];
           titulo = text;
         } else {
           const result = await searchYouTube(text);
-          url = result.url;
+          videoId = result.videoId;
           titulo = result.title;
         }
 
         await sock.sendMessage(from, { text: `⬇️ Descargando: *${titulo}*...` }, { quoted: msg });
-        await downloadAudio(url, tmpFile);
+
+        const mp3 = await getMp3Url(videoId);
+        await downloadMp3(mp3.url, tmpFile);
 
         const audioBuffer = await readFile(tmpFile);
         await sock.sendMessage(
           from,
-          { audio: audioBuffer, mimetype: "audio/mp4", ptt: false },
+          { audio: audioBuffer, mimetype: "audio/mpeg", ptt: false },
           { quoted: msg }
         );
         await react("✅");
@@ -126,8 +105,8 @@ const musicCommands = [
         console.error("[PLAY]", err.message);
         if (err.message.includes("No se encontró")) {
           await reply(`❌ No encontré: *${text}*`);
-        } else if (err.message.includes("sign in") || err.message.includes("bot")) {
-          await reply("❌ YouTube bloqueó la descarga.\n_Las cookies pueden haber expirado._");
+        } else if (err.message.includes("No se pudo obtener")) {
+          await reply("❌ No se pudo convertir la canción. Intenta con otro nombre.");
         } else {
           await reply("❌ No pude descargar la canción.\n_Intenta con otro nombre._");
         }
@@ -149,15 +128,22 @@ const musicCommands = [
       }
 
       await react("🎵");
-      await sock.sendMessage(from, { text: "⬇️ Descargando audio desde URL..." }, { quoted: msg });
-      const tmpFile = join(tmpdir(), `rage_url_${Date.now()}.mp4`);
+      await sock.sendMessage(from, { text: "⬇️ Procesando URL..." }, { quoted: msg });
+      const tmpFile = join(tmpdir(), `rage_url_${Date.now()}.mp3`);
 
       try {
-        await downloadAudio(url, tmpFile);
+        const match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+        if (!match) throw new Error("URL inválida.");
+        const videoId = match[1];
+
+        const mp3 = await getMp3Url(videoId);
+        await sock.sendMessage(from, { text: `⬇️ Descargando: *${mp3.title}*...` }, { quoted: msg });
+        await downloadMp3(mp3.url, tmpFile);
+
         const audioBuffer = await readFile(tmpFile);
         await sock.sendMessage(
           from,
-          { audio: audioBuffer, mimetype: "audio/mp4", ptt: false },
+          { audio: audioBuffer, mimetype: "audio/mpeg", ptt: false },
           { quoted: msg }
         );
         await react("✅");
