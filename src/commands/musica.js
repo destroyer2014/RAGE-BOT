@@ -3,7 +3,7 @@
 //   Descargar canciones via play-dl
 // ═══════════════════════════════════════════
 
-import { unlink, access, readFile, writeFile } from "fs/promises";
+import { unlink, access, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import playdl from "play-dl";
@@ -18,15 +18,44 @@ async function cookiesExist() {
   try { await access(COOKIES_PATH); return true; } catch { return false; }
 }
 
+// ── Cargar cookies de YouTube para play-dl ───
+let cookiesLoaded = false;
+async function loadCookies() {
+  if (cookiesLoaded) return;
+  try {
+    if (await cookiesExist()) {
+      const raw = await readFile(COOKIES_PATH, "utf-8");
+      // Parsear cookies.txt formato Netscape
+      const cookies = [];
+      for (const line of raw.split("\n")) {
+        if (line.startsWith("#") || !line.trim()) continue;
+        const parts = line.split("\t");
+        if (parts.length >= 7) {
+          cookies.push({ name: parts[5], value: parts[6].trim() });
+        }
+      }
+      if (cookies.length > 0) {
+        await playdl.setToken({ youtube: { cookie: cookies.map(c => `${c.name}=${c.value}`).join("; ") } });
+        console.log("[MUSICA] Cookies cargadas:", cookies.length);
+      }
+    }
+    cookiesLoaded = true;
+  } catch (e) {
+    console.log("[MUSICA] Error cargando cookies:", e.message);
+  }
+}
+
 // ── Busca en YouTube y retorna info ──────────
 async function searchYouTube(query) {
+  await loadCookies();
   const results = await playdl.search(query, { limit: 1, source: { youtube: "video" } });
   if (!results || results.length === 0) throw new Error("No se encontró ningún resultado.");
   return results[0];
 }
 
-// ── Descarga audio como mp3 ─────────────────
+// ── Descarga audio ─────────────────────────
 async function downloadAudio(url, outPath) {
+  await loadCookies();
   const stream = await playdl.stream(url, { quality: 2 });
   const writer = createWriteStream(outPath);
   await pipeline(stream.stream, writer);
