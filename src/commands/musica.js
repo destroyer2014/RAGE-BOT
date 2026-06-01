@@ -26,16 +26,19 @@ async function loadCookies() {
     if (await cookiesExist()) {
       const raw = await readFile(COOKIES_PATH, "utf-8");
       // Parsear cookies.txt formato Netscape
+      // Solo las cookies esenciales de YouTube
+      const ESSENTIAL = ["VISITOR_INFO1_LIVE", "YSC", "CONSENT", "__Secure-3PAPISID",
+        "__Secure-3PSID", "__Secure-3PSIDCC", "SAPISID", "SSID", "HSID", "SID", "LOGIN_INFO"];
       const cookies = [];
       for (const line of raw.split("\n")) {
         if (line.startsWith("#") || !line.trim()) continue;
         const parts = line.split("\t");
-        if (parts.length >= 7) {
-          cookies.push({ name: parts[5], value: parts[6].trim() });
+        if (parts.length >= 7 && ESSENTIAL.includes(parts[5])) {
+          cookies.push(`${parts[5]}=${parts[6].trim()}`);
         }
       }
       if (cookies.length > 0) {
-        await playdl.setToken({ youtube: { cookie: cookies.map(c => `${c.name}=${c.value}`).join("; ") } });
+        await playdl.setToken({ youtube: { cookie: cookies.join("; ") } });
         console.log("[MUSICA] Cookies cargadas:", cookies.length);
       }
     }
