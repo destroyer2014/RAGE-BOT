@@ -33,14 +33,23 @@ async function parseCookies() {
   }
 }
 
+// Cookies esenciales de YouTube
+const ESSENTIAL_COOKIES = [
+  "VISITOR_INFO1_LIVE", "YSC", "CONSENT", "LOGIN_INFO",
+  "__Secure-3PAPISID", "__Secure-3PSID", "__Secure-3PSIDCC",
+  "__Secure-3PSIDTS", "SAPISID", "SSID", "HSID", "SID",
+  "APISID", "NID", "PREF"
+];
+
 // ── Crear agente ytdl con cookies ───────────
 let ytdlAgent = null;
 async function getAgent() {
   if (ytdlAgent) return ytdlAgent;
-  const cookies = await parseCookies();
+  const allCookies = await parseCookies();
+  const cookies = allCookies.filter(c => ESSENTIAL_COOKIES.includes(c.name));
   if (cookies.length > 0) {
     ytdlAgent = ytdl.createAgent(cookies);
-    console.log("[MUSICA] Agente con", cookies.length, "cookies");
+    console.log("[MUSICA] Agente con", cookies.length, "cookies esenciales");
   }
   return ytdlAgent;
 }
