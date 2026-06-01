@@ -1,42 +1,84 @@
 // ═══════════════════════════════════════════
 //     PRAGMATA BOT — src/commands/musica.js
-//   Descargar canciones como AUDIO (mp3)
-//   Usa @distube/ytdl-core + ffmpeg-static
+//   Descargar canciones via Invidious API
+//   Sin yt-dlp, sin cookies, funciona en servidores
 // ═══════════════════════════════════════════
 
-import ytdl from "@distube/ytdl-core";
-import ytsr from "ytsr";
-import { createWriteStream, createReadStream } from "fs";
-import { unlink, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegPath from "ffmpeg-static";
+import { writeFile, unlink } from "fs/promises";
+import axios from "axios";
 
-ffmpeg.setFfmpegPath(ffmpegPath);
+// ── Instancias públicas de Invidious ────────
+const INVIDIOUS_INSTANCES = [
+  "https://invidious.nerdvpn.de",
+  "https://invidious.privacyredirect.com",
+  "https://inv.nadeko.net",
+  "https://invidious.lunar.icu",
+  "https://yt.artemislena.eu",
+];
 
-// ── Busca en YouTube y retorna info ──────────
-async function searchYouTube(query) {
-  const results = await ytsr(query, { limit: 1 });
-  const video = results.items.find(i => i.type === "video");
-  if (!video) throw new Error("No se encontró ningún resultado.");
-  return { url: video.url, title: video.title, duration: video.duration };
+// ── Buscar video en YouTube via Invidious ───
+async function searchVideo(query) {
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const res = await axios.get(`${instance}/api/v1/search`, {
+        params: { q: query, type: "video", fields: "videoId,title,lengthSeconds", page: 1 },
+        timeout: 8000,
+      });
+      if (res.data && res.data.length > 0) {
+        const v = res.data[0];
+        return {
+          id: v.videoId,
+          title: v.title,
+          duration: v.lengthSeconds,
+          url: `https://www.youtube.com/watch?v=${v.videoId}`,
+          instance,
+        };
+      }
+    } catch {}
+  }
+  throw new Error("No se encontró ningún resultado.");
 }
 
-// ── Descarga audio como mp3 ─────────────────
-async function downloadAudio(url, outPath) {
-  return new Promise((resolve, reject) => {
-    const stream = ytdl(url, {
-      quality: "highestaudio",
-      filter: "audioonly",
-    });
-    ffmpeg(stream)
-      .audioBitrate(128)
-      .toFormat("mp3")
-      .on("end", resolve)
-      .on("error", reject)
-      .save(outPath);
+// ── Obtener URL de audio via Invidious ──────
+async function getAudioUrl(videoId, instance) {
+  for (const inst of [instance, ...INVIDIOUS_INSTANCES.filter(i => i !== instance)]) {
+    try {
+      const res = await axios.get(`${inst}/api/v1/videos/${videoId}`, {
+        params: { fields: "adaptiveFormats,formatStreams" },
+        timeout: 10000,
+      });
+      const formats = [...(res.data.adaptiveFormats || []), ...(res.data.formatStreams || [])];
+      // Buscar formato de audio mp4 o webm
+      const audio = formats.find(f => f.type && f.type.includes("audio/mp4"))
+                 || formats.find(f => f.type && f.type.includes("audio/webm"))
+                 || formats.find(f => f.type && f.type.includes("audio"));
+      if (audio && audio.url) return { url: audio.url, instance: inst };
+    } catch {}
+  }
+  throw new Error("No se pudo obtener el audio.");
+}
+
+// ── Descargar audio como buffer ─────────────
+async function downloadAudioBuffer(url) {
+  const res = await axios.get(url, {
+    responseType: "arraybuffer",
+    timeout: 90000,
+    maxContentLength: 25 * 1024 * 1024,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Accept": "*/*",
+    },
   });
+  return Buffer.from(res.data);
+}
+
+// ── Formatear duración ─────────────────────
+function formatDuration(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 const musicCommands = [
@@ -59,31 +101,43 @@ const musicCommands = [
       await react("🎵");
       await sock.sendMessage(from, { text: `🔍 Buscando: *${text}*...` }, { quoted: msg });
 
-      const tmpMp3 = join(tmpdir(), `rage_audio_${Date.now()}.mp3`);
-
       try {
-        const isUrl = text.startsWith("http");
-        let url = text;
-        let title = text;
+        let videoId, titulo, duracion, instancia;
 
-        if (!isUrl) {
-          const info = await searchYouTube(text);
-          url = info.url;
-          title = info.title;
+        // Si es URL de YouTube
+        if (text.includes("youtube.com") || text.includes("youtu.be")) {
+          const match = text.match(/(?:v=|youtu\.be\/)([\w-]{11})/);
+          if (!match) return reply("❌ URL de YouTube inválida.");
+          videoId = match[1];
+          titulo = "Video de YouTube";
+          duracion = "";
+          instancia = INVIDIOUS_INSTANCES[0];
+        } else {
+          const info = await searchVideo(text);
+          videoId = info.id;
+          titulo = info.title;
+          duracion = ` (${formatDuration(info.duration)})`;
+          instancia = info.instance;
         }
 
-        await sock.sendMessage(from, { text: `⬇️ Descargando: *${title}*...` }, { quoted: msg });
-        await downloadAudio(url, tmpMp3);
+        await sock.sendMessage(from, {
+          text: `🎵 *${titulo}*${duracion}\n⬇️ Descargando...`
+        }, { quoted: msg });
 
-        const audioBuffer = await readFile(tmpMp3);
+        const { url: audioUrl } = await getAudioUrl(videoId, instancia);
+        const audioBuffer = await downloadAudioBuffer(audioUrl);
+
+        if (audioBuffer.length > 22 * 1024 * 1024) {
+          return reply("❌ La canción es demasiado pesada (máx ~22MB).");
+        }
+
+        // Detectar mimetype
+        const isWebm = audioUrl.includes("webm");
+        const mimetype = isWebm ? "audio/webm" : "audio/mp4";
 
         await sock.sendMessage(
           from,
-          {
-            audio: audioBuffer,
-            mimetype: "audio/mpeg",
-            ptt: false,
-          },
+          { audio: audioBuffer, mimetype, ptt: false },
           { quoted: msg }
         );
 
@@ -91,15 +145,13 @@ const musicCommands = [
       } catch (err) {
         console.error("[PLAY]", err.message);
         if (err.message.includes("No se encontró")) {
-          await reply(`❌ No encontré ninguna canción con: *${text}*`);
-        } else if (err.message.includes("Too large") || err.message.includes("size")) {
-          await reply("❌ La canción es demasiado pesada (máx 20MB).");
+          await reply(`❌ No encontré: *${text}*\nIntenta con otro nombre.`);
+        } else if (err.message.includes("No se pudo")) {
+          await reply("❌ No pude obtener el audio.\nIntenta con otra canción.");
         } else {
-          await reply("❌ No pude descargar la canción. Intenta con otro nombre o URL.");
+          await reply("❌ Error al descargar.\n_Intenta nuevamente en unos segundos._");
         }
         await react("❌");
-      } finally {
-        unlink(tmpMp3).catch(() => {});
       }
     },
   },
@@ -121,15 +173,22 @@ const musicCommands = [
       await react("🎵");
       await sock.sendMessage(from, { text: "⬇️ Descargando audio desde URL..." }, { quoted: msg });
 
-      const tmpMp3 = join(tmpdir(), `rage_url_${Date.now()}.mp3`);
-
       try {
-        await downloadAudio(url, tmpMp3);
-        const audioBuffer = await readFile(tmpMp3);
+        const match = url.match(/(?:v=|youtu\.be\/)([\w-]{11})/);
+        if (!match) return reply("❌ URL de YouTube inválida.");
+        const videoId = match[1];
 
+        const { url: audioUrl } = await getAudioUrl(videoId, INVIDIOUS_INSTANCES[0]);
+        const audioBuffer = await downloadAudioBuffer(audioUrl);
+
+        if (audioBuffer.length > 22 * 1024 * 1024) {
+          return reply("❌ La canción es demasiado pesada (máx ~22MB).");
+        }
+
+        const isWebm = audioUrl.includes("webm");
         await sock.sendMessage(
           from,
-          { audio: audioBuffer, mimetype: "audio/mpeg", ptt: false },
+          { audio: audioBuffer, mimetype: isWebm ? "audio/webm" : "audio/mp4", ptt: false },
           { quoted: msg }
         );
         await react("✅");
@@ -137,8 +196,6 @@ const musicCommands = [
         console.error("[PLAYURL]", err.message);
         await reply("❌ No pude descargar el audio.\n_Verifica que la URL sea válida._");
         await react("❌");
-      } finally {
-        unlink(tmpMp3).catch(() => {});
       }
     },
   },
