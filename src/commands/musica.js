@@ -3,22 +3,39 @@
 //   Descargar canciones via yt-dlp + cookies
 // ═══════════════════════════════════════════
 
-import { unlink, access } from "fs/promises";
+import { unlink, access, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
 import { exec } from "child_process";
-import ytDlpExec from "yt-dlp-exec";
+import { createRequire } from "module";
 
 const execAsync = promisify(exec);
+const require = createRequire(import.meta.url);
 
 // ── Ruta de cookies ─────────────────────────
 const COOKIES_PATH = "/home/container/cookies.txt";
 
+// ── Obtener binario yt-dlp (desde yt-dlp-exec o sistema) ──
+function getYtDlpBin() {
+  try {
+    const pkg = require.resolve("yt-dlp-exec/src/index.js");
+    const { getBinaryPath } = require("yt-dlp-exec/src/index.js");
+    if (getBinaryPath) return getBinaryPath();
+  } catch {}
+  // Fallback: binario dentro del paquete
+  try {
+    const binPath = require.resolve("yt-dlp-exec").replace("src/index.js", "bin/yt-dlp");
+    return binPath;
+  } catch {}
+  return "yt-dlp";
+}
+
 // ── Verifica si yt-dlp está disponible ──────
 async function ytdlpAvailable() {
   try {
-    await ytDlpExec("--version");
+    const bin = getYtDlpBin();
+    await execAsync(`"${bin}" --version`, { timeout: 5000 });
     return true;
   } catch {
     return false;
@@ -35,39 +52,30 @@ async function cookiesExist() {
   }
 }
 
-// ── Construye flags de cookies ───────────────
-async function getCookieFlag() {
-  if (await cookiesExist()) return `--cookies "${COOKIES_PATH}"`;
-  return "";
-}
-
 // ── Busca en YouTube y retorna URL ──────────
 async function searchYouTube(query) {
-  const opts = {
-    getUrl: true,
-    noPlaylist: true,
-    defaultSearch: `ytsearch1:${query}`,
-  };
-  if (await cookiesExist()) opts.cookies = COOKIES_PATH;
-  const result = await ytDlpExec("ytsearch1:" + query, { ...opts, getUrl: true });
-  // yt-dlp-exec retorna string con la URL
-  const url = typeof result === "string" ? result.trim().split("\n")[0] : "";
+  const bin = getYtDlpBin();
+  const cookieFlag = (await cookiesExist()) ? `--cookies "${COOKIES_PATH}"` : "";
+  const safe = query.replace(/"/g, "");
+  const { stdout } = await execAsync(
+    `"${bin}" ${cookieFlag} "ytsearch1:${safe}" --get-url --no-playlist`,
+    { timeout: 30000 }
+  );
+  const url = stdout.trim().split("\n")[0];
   if (!url) throw new Error("No se encontró ningún resultado.");
   return url;
 }
 
 // ── Descarga audio como mp3 ─────────────────
 async function downloadAudio(url, outPath) {
-  const opts = {
-    extractAudio: true,
-    audioFormat: "mp3",
-    audioQuality: 5,
-    noPlaylist: true,
-    maxFilesize: "20m",
-    output: outPath,
-  };
-  if (await cookiesExist()) opts.cookies = COOKIES_PATH;
-  await ytDlpExec(url, opts);
+  const bin = getYtDlpBin();
+  const cookieFlag = (await cookiesExist()) ? `--cookies "${COOKIES_PATH}"` : "";
+  await execAsync(
+    `"${bin}" ${cookieFlag} -x --audio-format mp3 --audio-quality 5 ` +
+    `--no-playlist --max-filesize 20m ` +
+    `--output "${outPath}" "${url}"`,
+    { timeout: 120000 }
+  );
 }
 
 const musicCommands = [
@@ -98,7 +106,6 @@ const musicCommands = [
         await sock.sendMessage(from, { text: "⬇️ Descargando audio..." }, { quoted: msg });
         await downloadAudio(url, tmpMp3);
 
-        const { readFile } = await import("fs/promises");
         const audioBuffer = await readFile(tmpMp3);
 
         await sock.sendMessage(
@@ -145,7 +152,6 @@ const musicCommands = [
 
       try {
         await downloadAudio(url, tmpMp3);
-        const { readFile } = await import("fs/promises");
         const audioBuffer = await readFile(tmpMp3);
         await sock.sendMessage(
           from,
