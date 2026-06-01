@@ -10,7 +10,7 @@ import { createWriteStream } from "fs";
 import axios from "axios";
 
 const YT_API_KEY = "AIzaSyCKBzgma9coMHFUsXt5Wt-VLUveFTU1hgI";
-const RAPID_API_KEY = "68493 5b1dbmsh60ff273781a78d7p1fd7bbjsn452f27ecaf24".replace(" ", "");
+const RAPID_API_KEY = "684935b1dbmsh60ff273781a78d7p1fd7bbjsn452f27ecaf24";
 
 // ── Buscar con YouTube Data API v3 ───────────
 async function searchYouTube(query) {
