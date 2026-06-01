@@ -35,9 +35,12 @@ function getYtDlpBin() {
 async function ytdlpAvailable() {
   try {
     const bin = getYtDlpBin();
-    await execAsync(`"${bin}" --version`, { timeout: 5000 });
+    console.log("[MUSICA] bin path:", bin);
+    const { stdout } = await execAsync(`"${bin}" --version`, { timeout: 5000 });
+    console.log("[MUSICA] yt-dlp version:", stdout.trim());
     return true;
-  } catch {
+  } catch (e) {
+    console.log("[MUSICA] yt-dlp no disponible:", e.message);
     return false;
   }
 }
